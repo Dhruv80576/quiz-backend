@@ -11,26 +11,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.connectDB = void 0;
 const client_1 = require("@prisma/client");
-// Initialize PrismaClient with error handling
-let prisma;
-try {
-    prisma = new client_1.PrismaClient({
-        log: ['query', 'info', 'warn', 'error'],
-        errorFormat: 'pretty',
-    });
-}
-catch (error) {
-    console.error('Failed to initialize Prisma client:', error);
-    process.exit(1);
-}
-// Function to connect to the database
+const prisma = new client_1.PrismaClient();
 const connectDB = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield prisma.$connect();
-        console.log('Connected to database');
+        console.log('Database connected successfully');
     }
     catch (error) {
-        console.error('Failed to connect to database:', error);
+        console.error('Database connection error:', error);
         process.exit(1);
     }
 });

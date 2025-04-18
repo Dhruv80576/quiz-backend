@@ -8,13 +8,14 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
+  id        String     @id @default(uuid())
+  email     String     @unique
   password  String
-  role      Role     @default(STUDENT)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  role      Role       @default(STUDENT)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
   quizzes   Quiz[]
+  responses Response[]
 }
 
 enum Role {
@@ -23,23 +24,45 @@ enum Role {
 }
 
 model Quiz {
-  id          String     @id @default(uuid())
+  id          String     @id @default(cuid())
   title       String
   description String
-  duration    Int        // Duration in minutes
+  duration    Int
   isPublic    Boolean    @default(false)
+  password    String?    // Optional password for quiz access
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   teacherId   String
   teacher     User       @relation(fields: [teacherId], references: [id])
   questions   Question[]
+  responses   Response[]
+}
+
+model Response {
+  id        String   @id @default(cuid())
+  quizId    String
+  quiz      Quiz     @relation(fields: [quizId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  answers   Json     // Store answers as JSON
+  score     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum QuestionType {
+  SINGLE_SELECT
+  MULTIPLE_SELECT
+  FILL_IN_BLANK
+  INTEGER
 }
 
 model Question {
-  id          String   @id @default(uuid())
-  text        String
-  options     String[] // Array of options
-  correctAnswer Int    // Index of correct answer in options array
-  quizId      String
-  quiz        Quiz     @relation(fields: [quizId], references: [id])
+  id            String       @id @default(uuid())
+  text          String
+  type          QuestionType
+  options       String[]     // For single/multiple select questions
+  correctAnswer Int          // For single/multiple select: index, for fill-in-blank: 0, for integer: exact number
+  quizId        String
+  quiz          Quiz         @relation(fields: [quizId], references: [id])
 }

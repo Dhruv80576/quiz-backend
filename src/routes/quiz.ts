@@ -1,24 +1,29 @@
 import { Router } from 'express';
-import { 
-  createQuiz, 
-  updateQuiz, 
+import { authenticateToken } from '../middleware/auth';
+import { AuthRequest } from '../types';
+import {
+  createQuiz,
+  updateQuiz,
   deleteQuiz,
   addQuestion,
   updateQuestion,
-  deleteQuestion
+  deleteQuestion,
+  validateQuizPassword,
+  makeQuizPublic
 } from '../controllers/quiz';
-import { authenticateToken, verifyTeacher } from '../middleware/auth';
 
 const router = Router();
 
-// Quiz routes
-router.post('/', authenticateToken, verifyTeacher, createQuiz);
-router.put('/:id', authenticateToken, verifyTeacher, updateQuiz);
-router.delete('/:id', authenticateToken, verifyTeacher, deleteQuiz);
+// Protected routes (require authentication)
+router.post('/', authenticateToken, (req: AuthRequest, res) => createQuiz(req, res));
+router.put('/:id', authenticateToken, (req: AuthRequest, res) => updateQuiz(req, res));
+router.delete('/:id', authenticateToken, (req: AuthRequest, res) => deleteQuiz(req, res));
+router.post('/:quizId/questions', authenticateToken, (req: AuthRequest, res) => addQuestion(req, res));
+router.put('/:quizId/questions/:questionId', authenticateToken, (req: AuthRequest, res) => updateQuestion(req, res));
+router.delete('/:quizId/questions/:questionId', authenticateToken, (req: AuthRequest, res) => deleteQuestion(req, res));
+router.post('/:id/public', authenticateToken, (req: AuthRequest, res) => makeQuizPublic(req, res));
 
-// Question routes
-router.post('/:quizId/questions', authenticateToken, verifyTeacher, addQuestion);
-router.put('/questions/:questionId', authenticateToken, verifyTeacher, updateQuestion);
-router.delete('/questions/:questionId', authenticateToken, verifyTeacher, deleteQuestion);
+// Public route for password validation
+router.post('/:id/validate-password', (req, res) => validateQuizPassword(req, res));
 
 export default router;

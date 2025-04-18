@@ -1,25 +1,13 @@
 import { PrismaClient } from '@prisma/client';
 
-// Initialize PrismaClient with error handling
-let prisma: PrismaClient;
+const prisma = new PrismaClient();
 
-try {
-  prisma = new PrismaClient({
-    log: ['query', 'info', 'warn', 'error'],
-    errorFormat: 'pretty',
-  });
-} catch (error) {
-  console.error('Failed to initialize Prisma client:', error);
-  process.exit(1);
-}
-
-// Function to connect to the database
-export const connectDB = async (): Promise<void> => {
+export const connectDB = async () => {
   try {
     await prisma.$connect();
-    console.log('Connected to database');
+    console.log('Database connected successfully');
   } catch (error) {
-    console.error('Failed to connect to database:', error);
+    console.error('Database connection error:', error);
     process.exit(1);
   }
 };

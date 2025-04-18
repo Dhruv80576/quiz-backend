@@ -9,7 +9,8 @@ import {
   updateQuestion,
   deleteQuestion,
   validateQuizPassword,
-  makeQuizPublic
+  makeQuizPublic,
+  submitQuiz
 } from '../controllers/quiz';
 
 const router = Router();
@@ -22,6 +23,7 @@ router.post('/:quizId/questions', authenticateToken, (req: AuthRequest, res) => 
 router.put('/:quizId/questions/:questionId', authenticateToken, (req: AuthRequest, res) => updateQuestion(req, res));
 router.delete('/:quizId/questions/:questionId', authenticateToken, (req: AuthRequest, res) => deleteQuestion(req, res));
 router.post('/:id/public', authenticateToken, (req: AuthRequest, res) => makeQuizPublic(req, res));
+router.post('/:id/submit', authenticateToken, (req: AuthRequest, res) => submitQuiz(req, res));
 
 // Public route for password validation
 router.post('/:id/validate-password', (req, res) => validateQuizPassword(req, res));

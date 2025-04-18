@@ -49,6 +49,15 @@ interface QuestionResponse {
   correctAnswer: number;
 }
 
+interface QuizAnswer {
+  questionId: string;
+  answer: string | number | number[];
+}
+
+interface SubmitQuizRequest {
+  answers: QuizAnswer[];
+}
+
 const validateQuestion = (question: CreateQuestionRequest | UpdateQuestionRequest): boolean => {
   if (!question.type) return false;
 
@@ -67,6 +76,36 @@ const validateQuestion = (question: CreateQuestionRequest | UpdateQuestionReques
     default:
       return false;
   }
+};
+
+const calculateScore = (questions: any[], answers: QuizAnswer[]): number => {
+  let score = 0;
+  
+  answers.forEach(answer => {
+    const question = questions.find(q => q.id === answer.questionId);
+    if (!question) return;
+
+    switch (question.type) {
+      case 'SINGLE_SELECT':
+        if (answer.answer === question.correctAnswer) score++;
+        break;
+      case 'MULTIPLE_SELECT':
+        if (Array.isArray(answer.answer) && 
+            answer.answer.length === question.correctAnswer.length &&
+            answer.answer.every(a => question.correctAnswer.includes(a))) {
+          score++;
+        }
+        break;
+      case 'FILL_IN_BLANK':
+        if (answer.answer === question.correctAnswer) score++;
+        break;
+      case 'INTEGER':
+        if (Number(answer.answer) === question.correctAnswer) score++;
+        break;
+    }
+  });
+
+  return score;
 };
 
 export const createQuiz = async (req: AuthRequest, res: Response) => {
@@ -392,5 +431,48 @@ export const makeQuizPublic = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error making quiz public:', error);
     return res.status(500).json({ error: 'Failed to make quiz public' });
+  }
+};
+
+export const submitQuiz = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { answers } = req.body as SubmitQuizRequest;
+    
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Get quiz with questions
+    const quiz = await prisma.quiz.findUnique({
+      where: { id },
+      include: { questions: true }
+    });
+
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    // Calculate score
+    const score = calculateScore(quiz.questions, answers);
+
+    // Store response
+    const response = await prisma.response.create({
+      data: {
+        quizId: id,
+        userId: req.user.id,
+        answers: answers as any, // Type assertion for Prisma JSON field
+        score: score
+      }
+    });
+
+    return res.json({
+      message: 'Quiz submitted successfully',
+      score: score,
+      totalQuestions: quiz.questions.length
+    });
+  } catch (error) {
+    console.error('Error submitting quiz:', error);
+    return res.status(500).json({ error: 'Failed to submit quiz' });
   }
 }; 

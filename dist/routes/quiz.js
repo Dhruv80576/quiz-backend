@@ -12,6 +12,7 @@ router.post('/:quizId/questions', auth_1.authenticateToken, (req, res) => (0, qu
 router.put('/:quizId/questions/:questionId', auth_1.authenticateToken, (req, res) => (0, quiz_1.updateQuestion)(req, res));
 router.delete('/:quizId/questions/:questionId', auth_1.authenticateToken, (req, res) => (0, quiz_1.deleteQuestion)(req, res));
 router.post('/:id/public', auth_1.authenticateToken, (req, res) => (0, quiz_1.makeQuizPublic)(req, res));
+router.post('/:id/submit', auth_1.authenticateToken, (req, res) => (0, quiz_1.submitQuiz)(req, res));
 // Public route for password validation
 router.post('/:id/validate-password', (req, res) => (0, quiz_1.validateQuizPassword)(req, res));
 exports.default = router;

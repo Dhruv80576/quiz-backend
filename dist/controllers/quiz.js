@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.makeQuizPublic = exports.validateQuizPassword = exports.deleteQuestion = exports.updateQuestion = exports.addQuestion = exports.deleteQuiz = exports.updateQuiz = exports.createQuiz = void 0;
+exports.submitQuiz = exports.makeQuizPublic = exports.validateQuizPassword = exports.deleteQuestion = exports.updateQuestion = exports.addQuestion = exports.deleteQuiz = exports.updateQuiz = exports.createQuiz = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const validateQuestion = (question) => {
     if (!question.type)
@@ -32,6 +32,36 @@ const validateQuestion = (question) => {
         default:
             return false;
     }
+};
+const calculateScore = (questions, answers) => {
+    let score = 0;
+    answers.forEach(answer => {
+        const question = questions.find(q => q.id === answer.questionId);
+        if (!question)
+            return;
+        switch (question.type) {
+            case 'SINGLE_SELECT':
+                if (answer.answer === question.correctAnswer)
+                    score++;
+                break;
+            case 'MULTIPLE_SELECT':
+                if (Array.isArray(answer.answer) &&
+                    answer.answer.length === question.correctAnswer.length &&
+                    answer.answer.every(a => question.correctAnswer.includes(a))) {
+                    score++;
+                }
+                break;
+            case 'FILL_IN_BLANK':
+                if (answer.answer === question.correctAnswer)
+                    score++;
+                break;
+            case 'INTEGER':
+                if (Number(answer.answer) === question.correctAnswer)
+                    score++;
+                break;
+        }
+    });
+    return score;
 };
 const createQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -309,3 +339,41 @@ const makeQuizPublic = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.makeQuizPublic = makeQuizPublic;
+const submitQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        const { answers } = req.body;
+        if (!req.user) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        // Get quiz with questions
+        const quiz = yield db_1.default.quiz.findUnique({
+            where: { id },
+            include: { questions: true }
+        });
+        if (!quiz) {
+            return res.status(404).json({ error: 'Quiz not found' });
+        }
+        // Calculate score
+        const score = calculateScore(quiz.questions, answers);
+        // Store response
+        const response = yield db_1.default.response.create({
+            data: {
+                quizId: id,
+                userId: req.user.id,
+                answers: answers, // Type assertion for Prisma JSON field
+                score: score
+            }
+        });
+        return res.json({
+            message: 'Quiz submitted successfully',
+            score: score,
+            totalQuestions: quiz.questions.length
+        });
+    }
+    catch (error) {
+        console.error('Error submitting quiz:', error);
+        return res.status(500).json({ error: 'Failed to submit quiz' });
+    }
+});
+exports.submitQuiz = submitQuiz;

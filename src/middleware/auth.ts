@@ -2,30 +2,32 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthRequest } from '../types';
 
-export const authenticateToken = (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): void => {
-  const authHeader = req.headers['authorization'] as string | undefined;
-  const token = authHeader?.split(' ')[1];
+export const authenticateToken = (req: Request, res: Response, next: NextFunction): void => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
     res.status(401).json({ message: 'No token provided' });
     return;
   }
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
-      id: string;
-      email: string;
-      role: 'TEACHER' | 'STUDENT';
-    };
-    req.user = decoded;
+  jwt.verify(token, process.env.JWT_SECRET as string, (err, user) => {
+    if (err) {
+      res.status(403).json({ message: 'Invalid token' });
+      return;
+    }
+    (req as AuthRequest).user = user as { id: string; email: string; role: 'TEACHER' | 'STUDENT' };
     next();
-  } catch (error) {
-    res.status(403).json({ message: 'Invalid token' });
+  });
+};
+
+export const verifyTeacher = (req: Request, res: Response, next: NextFunction): void => {
+  const authReq = req as AuthRequest;
+  if (!authReq.user || authReq.user.role !== 'TEACHER') {
+    res.status(403).json({ message: 'Only teachers can perform this action' });
+    return;
   }
+  next();
 };
 
 export const authorizeRole = (roles: ('TEACHER' | 'STUDENT')[]) => {

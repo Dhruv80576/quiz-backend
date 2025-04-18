@@ -14,9 +14,32 @@ model User {
   role      Role     @default(STUDENT)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  quizzes   Quiz[]
 }
 
 enum Role {
   TEACHER
   STUDENT
+}
+
+model Quiz {
+  id          String     @id @default(uuid())
+  title       String
+  description String
+  duration    Int        // Duration in minutes
+  isPublic    Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  teacherId   String
+  teacher     User       @relation(fields: [teacherId], references: [id])
+  questions   Question[]
+}
+
+model Question {
+  id          String   @id @default(uuid())
+  text        String
+  options     String[] // Array of options
+  correctAnswer Int    // Index of correct answer in options array
+  quizId      String
+  quiz        Quiz     @relation(fields: [quizId], references: [id])
 }

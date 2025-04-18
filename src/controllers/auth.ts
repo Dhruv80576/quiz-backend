@@ -30,16 +30,8 @@ export const signup = async (req: Request<{}, {}, SignupRequest>, res: Response)
       },
     });
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET as string,
-      { expiresIn: '24h' }
-    );
-
     res.status(201).json({
-      message: 'User created successfully',
-      token,
+      message: 'User created successfully. Please login to continue.',
       user: {
         id: user.id,
         email: user.email,

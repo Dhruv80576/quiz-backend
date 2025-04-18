@@ -37,11 +37,8 @@ const signup = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 role,
             },
         });
-        // Generate JWT token
-        const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
         res.status(201).json({
-            message: 'User created successfully',
-            token,
+            message: 'User created successfully. Please login to continue.',
             user: {
                 id: user.id,
                 email: user.email,

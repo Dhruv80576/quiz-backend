@@ -10,7 +10,8 @@ import {
   deleteQuestion,
   validateQuizPassword,
   makeQuizPublic,
-  submitQuiz
+  submitQuiz,
+  getQuizLeaderboard
 } from '../controllers/quiz';
 
 const router = Router();
@@ -27,5 +28,8 @@ router.post('/:id/submit', authenticateToken, (req: AuthRequest, res) => submitQ
 
 // Public route for password validation
 router.post('/:id/validate-password', (req, res) => validateQuizPassword(req, res));
+
+// New route for getting quiz leaderboard
+router.get('/:id/leaderboard', (req, res) => getQuizLeaderboard(req, res));
 
 export default router;

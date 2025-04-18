@@ -15,4 +15,6 @@ router.post('/:id/public', auth_1.authenticateToken, (req, res) => (0, quiz_1.ma
 router.post('/:id/submit', auth_1.authenticateToken, (req, res) => (0, quiz_1.submitQuiz)(req, res));
 // Public route for password validation
 router.post('/:id/validate-password', (req, res) => (0, quiz_1.validateQuizPassword)(req, res));
+// New route for getting quiz leaderboard
+router.get('/:id/leaderboard', (req, res) => (0, quiz_1.getQuizLeaderboard)(req, res));
 exports.default = router;

@@ -475,4 +475,59 @@ export const submitQuiz = async (req: AuthRequest, res: Response) => {
     console.error('Error submitting quiz:', error);
     return res.status(500).json({ error: 'Failed to submit quiz' });
   }
+};
+
+export const getQuizLeaderboard = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Get quiz with responses and user details
+    const quiz = await prisma.quiz.findUnique({
+      where: { id },
+      include: {
+        responses: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true
+              }
+            }
+          },
+          orderBy: {
+            score: 'desc'
+          }
+        },
+        _count: {
+          select: {
+            questions: true
+          }
+        }
+      }
+    });
+
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    // Format leaderboard data
+    const leaderboard = quiz.responses.map((response, index) => ({
+      rank: index + 1,
+      userId: response.userId,
+      email: response.user.email,
+      score: response.score,
+      totalQuestions: quiz._count.questions,
+      percentage: Math.round((response.score / quiz._count.questions) * 100),
+      submittedAt: response.createdAt
+    }));
+
+    return res.json({
+      quizTitle: quiz.title,
+      totalParticipants: leaderboard.length,
+      leaderboard
+    });
+  } catch (error) {
+    console.error('Error fetching leaderboard:', error);
+    return res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
 }; 

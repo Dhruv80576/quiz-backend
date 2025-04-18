@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.submitQuiz = exports.makeQuizPublic = exports.validateQuizPassword = exports.deleteQuestion = exports.updateQuestion = exports.addQuestion = exports.deleteQuiz = exports.updateQuiz = exports.createQuiz = void 0;
+exports.getQuizLeaderboard = exports.submitQuiz = exports.makeQuizPublic = exports.validateQuizPassword = exports.deleteQuestion = exports.updateQuestion = exports.addQuestion = exports.deleteQuiz = exports.updateQuiz = exports.createQuiz = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const validateQuestion = (question) => {
     if (!question.type)
@@ -377,3 +377,55 @@ const submitQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     }
 });
 exports.submitQuiz = submitQuiz;
+const getQuizLeaderboard = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        // Get quiz with responses and user details
+        const quiz = yield db_1.default.quiz.findUnique({
+            where: { id },
+            include: {
+                responses: {
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                email: true
+                            }
+                        }
+                    },
+                    orderBy: {
+                        score: 'desc'
+                    }
+                },
+                _count: {
+                    select: {
+                        questions: true
+                    }
+                }
+            }
+        });
+        if (!quiz) {
+            return res.status(404).json({ error: 'Quiz not found' });
+        }
+        // Format leaderboard data
+        const leaderboard = quiz.responses.map((response, index) => ({
+            rank: index + 1,
+            userId: response.userId,
+            email: response.user.email,
+            score: response.score,
+            totalQuestions: quiz._count.questions,
+            percentage: Math.round((response.score / quiz._count.questions) * 100),
+            submittedAt: response.createdAt
+        }));
+        return res.json({
+            quizTitle: quiz.title,
+            totalParticipants: leaderboard.length,
+            leaderboard
+        });
+    }
+    catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        return res.status(500).json({ error: 'Failed to fetch leaderboard' });
+    }
+});
+exports.getQuizLeaderboard = getQuizLeaderboard;

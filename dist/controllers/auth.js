@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.login = exports.signup = void 0;
+exports.googleLogin = exports.login = exports.signup = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = __importDefault(require("../config/db"));
@@ -87,3 +87,42 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.login = login;
+// src/controllers/auth.ts
+const googleLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        if (!req.googleUser) {
+            return res.status(401).json({ error: 'No Google user data' });
+        }
+        const { email, name, picture, googleId } = req.googleUser;
+        // Find or create user
+        let user = yield db_1.default.user.findUnique({
+            where: { email }
+        });
+        if (!user) {
+            user = yield db_1.default.user.create({
+                data: {
+                    email,
+                    name,
+                    googleId,
+                    role: 'STUDENT'
+                }
+            });
+        }
+        // Generate JWT token
+        const token = jsonwebtoken_1.default.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
+        res.json({
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                role: user.role
+            }
+        });
+    }
+    catch (error) {
+        console.error('Google login error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+exports.googleLogin = googleLogin;

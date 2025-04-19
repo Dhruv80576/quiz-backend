@@ -3,6 +3,27 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { SignupRequest, LoginRequest } from '../types';
 import prisma from '../config/db';
+import { Role } from '@prisma/client';
+
+interface GoogleUser {
+  email: string;
+  name: string;
+  picture: string;
+  googleId: string;
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      googleUser?: GoogleUser;
+      user?: {
+        id: string;
+        email: string;
+        role: Role;
+      };
+    }
+  }
+}
 
 export const signup = async (req: Request<{}, {}, SignupRequest>, res: Response): Promise<void> => {
   try {
@@ -59,7 +80,7 @@ export const login = async (req: Request<{}, {}, LoginRequest>, res: Response): 
     }
 
     // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.password as string);
 
     if (!isValidPassword) {
       res.status(401).json({ message: 'Invalid credentials' });
@@ -86,5 +107,52 @@ export const login = async (req: Request<{}, {}, LoginRequest>, res: Response): 
     console.error('Login error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
-}; 
+};
+
+// src/controllers/auth.ts
+export const googleLogin = async (req: Request, res: Response) => {
+  try {
+    if (!req.googleUser) {
+      return res.status(401).json({ error: 'No Google user data' });
+    }
+
+    const { email, name, picture, googleId } = req.googleUser;
+
+    // Find or create user
+    let user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email,
+          name,
+          googleId,
+          role: 'STUDENT' as Role
+        }
+      });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user.id, role: user.role },
+      process.env.JWT_SECRET!,
+      { expiresIn: '1d' }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Google login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 

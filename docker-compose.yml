@@ -20,4 +20,4 @@ services:
       start_period: 10s
 
 volumes:
-  minio_data: 
+  minio_data:

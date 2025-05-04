@@ -45,6 +45,7 @@ model Quiz {
   classId     String?
   class       Class?     @relation(fields: [classId], references: [id])
   images      QuizImage[]
+  totalMarks  Int        @default(0)  // Total marks for the quiz
 }
 
 model Response {
@@ -54,7 +55,8 @@ model Response {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   answers   Json     // Store answers as JSON
-  score     Int
+  score     Int      // Store score as marks obtained
+  totalMarks Int     // Store total possible marks
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -72,6 +74,7 @@ model Question {
   type          QuestionType
   options       String[]     // For single/multiple select questions
   correctAnswer Int          // For single/multiple select: index, for fill-in-blank: 0, for integer: exact number
+  marks         Int          @default(1)  // Marks for this question
   quizId        String
   quiz          Quiz         @relation(fields: [quizId], references: [id])
   images        QuestionImage[]

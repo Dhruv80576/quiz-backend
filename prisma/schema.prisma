@@ -18,9 +18,12 @@ model User {
   updatedAt DateTime   @updatedAt
   quizzes   Quiz[]
   responses Response[]
+  teachingClasses Class[]    @relation("TeacherClasses")
+  enrolledClasses Class[]    @relation("StudentClasses")
 }
 
 enum Role {
+  ADMIN
   TEACHER
   STUDENT
 }
@@ -38,6 +41,8 @@ model Quiz {
   teacher     User       @relation(fields: [teacherId], references: [id])
   questions   Question[]
   responses   Response[]
+  classId     String?
+  class       Class?     @relation(fields: [classId], references: [id])
 }
 
 model Response {
@@ -67,4 +72,17 @@ model Question {
   correctAnswer Int          // For single/multiple select: index, for fill-in-blank: 0, for integer: exact number
   quizId        String
   quiz          Quiz         @relation(fields: [quizId], references: [id])
+}
+
+model Class {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  password    String   // Password for students to join
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  teacherId   String
+  teacher     User     @relation("TeacherClasses", fields: [teacherId], references: [id])
+  students    User[]   @relation("StudentClasses")
+  quizzes     Quiz[]
 }

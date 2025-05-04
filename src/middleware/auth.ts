@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthRequest } from '../types';
+import { Role } from '@prisma/client';
 
 export const authenticateToken = (req: Request, res: Response, next: NextFunction): void => {
   const authHeader = req.headers['authorization'];
@@ -16,7 +17,7 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
       res.status(403).json({ message: 'Invalid token' });
       return;
     }
-    (req as AuthRequest).user = user as { id: string; email: string; role: 'TEACHER' | 'STUDENT' };
+    (req as AuthRequest).user = user as { id: string; email: string; role: Role };
     next();
   });
 };
@@ -30,7 +31,7 @@ export const verifyTeacher = (req: Request, res: Response, next: NextFunction): 
   next();
 };
 
-export const authorizeRole = (roles: ('TEACHER' | 'STUDENT')[]) => {
+export const authorizeRole = (roles: Role[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ message: 'Not authenticated' });

@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import { connectDB } from './config/db';
 import authRoutes from './routes/auth';
 import quizRoutes from './routes/quiz';
+import adminRoutes from './routes/adminRoutes';
+import classRoutes from './routes/classRoutes';
 
 // Load environment variables first
 dotenv.config();
@@ -18,6 +20,8 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/quiz', quizRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/classes', classRoutes);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

@@ -13,7 +13,6 @@ import {
   submitQuiz,
   getQuizLeaderboard,
   searchQuizzes,
-  getQuiz,
   getQuizzes,
   getResponseDetails,
   getQuizMetadata,

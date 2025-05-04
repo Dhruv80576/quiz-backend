@@ -16,7 +16,7 @@ model User {
   role      Role       @default(STUDENT)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
-  quizzes   Quiz[]
+  quizzes   Quiz[]     @relation("TeacherQuizzes")
   responses Response[]
   teachingClasses Class[]    @relation("TeacherClasses")
   enrolledClasses Class[]    @relation("StudentClasses")
@@ -30,22 +30,23 @@ enum Role {
 }
 
 model Quiz {
-  id          String     @id @default(cuid())
+  id          String     @id @default(uuid())
   title       String
-  description String
-  duration    Int
+  description String?
+  duration    Int        // Duration in minutes
   isPublic    Boolean    @default(false)
   password    String?    // Optional password for quiz access
+  totalMarks  Int        @default(0)  // Total marks for the quiz
+  uniqueAttempts Int     @default(0)  // Number of unique users who attempted the quiz
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   teacherId   String
-  teacher     User       @relation(fields: [teacherId], references: [id])
+  teacher     User       @relation("TeacherQuizzes", fields: [teacherId], references: [id])
   questions   Question[]
   responses   Response[]
   classId     String?
   class       Class?     @relation(fields: [classId], references: [id])
   images      QuizImage[]
-  totalMarks  Int        @default(0)  // Total marks for the quiz
 }
 
 model Response {

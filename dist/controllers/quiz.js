@@ -440,41 +440,58 @@ const makeQuizPublic = (req, res) => __awaiter(void 0, void 0, void 0, function*
 exports.makeQuizPublic = makeQuizPublic;
 const submitQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { id } = req.params;
+        const { quizId } = req.params;
         const { answers } = req.body;
         if (!req.user) {
             return res.status(401).json({ error: 'Unauthorized' });
         }
-        // Get quiz with questions
+        // Check if user has already submitted this quiz
+        const existingResponse = yield db_1.default.response.findFirst({
+            where: {
+                quizId,
+                userId: req.user.id
+            }
+        });
+        if (existingResponse) {
+            return res.status(400).json({ error: 'You have already submitted this quiz' });
+        }
+        // Get quiz with questions to validate answers
         const quiz = yield db_1.default.quiz.findUnique({
-            where: { id },
-            include: { questions: true }
+            where: { id: quizId },
+            include: {
+                questions: true
+            }
         });
         if (!quiz) {
             return res.status(404).json({ error: 'Quiz not found' });
         }
-        // Calculate score and total marks
+        // Calculate score
         const { score, totalMarks } = calculateScore(quiz.questions, answers);
-        // Store response with detailed scoring
-        const response = yield db_1.default.response.create({
-            data: {
-                quizId: id,
-                userId: req.user.id,
-                answers: answers,
-                score,
-                totalMarks
-            }
-        });
+        // Create response and increment uniqueAttempts in a transaction
+        const [response] = yield db_1.default.$transaction([
+            db_1.default.response.create({
+                data: {
+                    quizId,
+                    userId: req.user.id,
+                    answers,
+                    score,
+                    totalMarks
+                }
+            }),
+            db_1.default.quiz.update({
+                where: { id: quizId },
+                data: {
+                    uniqueAttempts: {
+                        increment: 1
+                    }
+                }
+            })
+        ]);
         return res.json({
             message: 'Quiz submitted successfully',
             score,
             totalMarks,
-            percentage: Math.round((score / totalMarks) * 100),
-            details: {
-                obtainedMarks: score,
-                totalPossibleMarks: totalMarks,
-                percentage: Math.round((score / totalMarks) * 100)
-            }
+            percentage: Math.round((score / totalMarks) * 100)
         });
     }
     catch (error) {
@@ -800,6 +817,7 @@ const getQuizMetadata = (req, res) => __awaiter(void 0, void 0, void 0, function
             duration: quiz.duration,
             isPublic: quiz.isPublic,
             totalMarks: quiz.totalMarks,
+            uniqueAttempts: quiz.uniqueAttempts,
             createdAt: quiz.createdAt,
             updatedAt: quiz.updatedAt,
             teacher: quiz.teacher,

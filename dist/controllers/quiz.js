@@ -12,8 +12,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getQuizLeaderboard = exports.submitQuiz = exports.makeQuizPublic = exports.validateQuizPassword = exports.deleteQuestion = exports.updateQuestion = exports.addQuestion = exports.deleteQuiz = exports.updateQuiz = exports.createQuiz = void 0;
+exports.getQuizzes = exports.getQuiz = exports.searchQuizzes = exports.getQuizLeaderboard = exports.submitQuiz = exports.makeQuizPublic = exports.validateQuizPassword = exports.deleteQuestion = exports.updateQuestion = exports.addQuestion = exports.deleteQuiz = exports.updateQuiz = exports.createQuiz = void 0;
 const db_1 = __importDefault(require("../config/db"));
+const client_1 = require("@prisma/client");
+const s3_1 = require("../config/s3");
 const validateQuestion = (question) => {
     if (!question.type)
         return false;
@@ -88,7 +90,12 @@ const createQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 }
             },
             include: {
-                questions: true
+                questions: {
+                    include: {
+                        images: true, // Include question images
+                    },
+                },
+                images: true, // Include quiz images
             }
         });
         return res.status(201).json(quiz);
@@ -102,7 +109,7 @@ exports.createQuiz = createQuiz;
 const updateQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        const { title, description, duration, isPublic, password } = req.body;
+        const { title, description, duration, isPublic, password, imagesToDelete } = req.body;
         if (!req.user) {
             res.status(401).json({ message: 'Unauthorized' });
             return;
@@ -110,7 +117,14 @@ const updateQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         // Check if quiz exists and belongs to the teacher
         const existingQuiz = yield db_1.default.quiz.findUnique({
             where: { id },
-            include: { questions: true }
+            include: {
+                questions: {
+                    include: {
+                        images: true,
+                    },
+                },
+                images: true,
+            }
         });
         if (!existingQuiz) {
             res.status(404).json({ message: 'Quiz not found' });
@@ -120,25 +134,44 @@ const updateQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             res.status(403).json({ message: 'You can only update your own quizzes' });
             return;
         }
+        // Delete specified images if any
+        if (imagesToDelete && imagesToDelete.length > 0) {
+            const imagesToRemove = existingQuiz.images.filter(img => imagesToDelete.includes(img.id));
+            // Delete images from S3
+            const deletePromises = imagesToRemove.map(image => {
+                const key = image.imageUrl.split('/').pop();
+                if (key) {
+                    return (0, s3_1.deleteFromS3)(key);
+                }
+                return Promise.resolve();
+            });
+            // Wait for all image deletions to complete
+            yield Promise.all(deletePromises);
+            // Delete image records from database
+            yield db_1.default.quizImage.deleteMany({
+                where: {
+                    id: {
+                        in: imagesToDelete
+                    }
+                }
+            });
+        }
         // Update quiz with only the provided fields
         const updatedQuiz = yield db_1.default.quiz.update({
             where: { id },
             data: Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({}, (title && { title })), (description && { description })), (duration && { duration })), (isPublic !== undefined && { isPublic })), (password !== undefined && { password: password || null })),
             include: {
-                questions: true
+                questions: {
+                    include: {
+                        images: true,
+                    },
+                },
+                images: true,
             }
         });
         res.json({
             message: 'Quiz updated successfully',
-            quiz: {
-                id: updatedQuiz.id,
-                title: updatedQuiz.title,
-                description: updatedQuiz.description,
-                duration: updatedQuiz.duration,
-                isPublic: updatedQuiz.isPublic,
-                password: updatedQuiz.password,
-                questions: updatedQuiz.questions
-            }
+            quiz: updatedQuiz
         });
     }
     catch (error) {
@@ -156,7 +189,15 @@ const deleteQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         }
         // Check if quiz exists and belongs to the teacher
         const existingQuiz = yield db_1.default.quiz.findUnique({
-            where: { id }
+            where: { id },
+            include: {
+                images: true,
+                questions: {
+                    include: {
+                        images: true
+                    }
+                }
+            }
         });
         if (!existingQuiz) {
             res.status(404).json({ message: 'Quiz not found' });
@@ -166,7 +207,27 @@ const deleteQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             res.status(403).json({ message: 'You can only delete your own quizzes' });
             return;
         }
-        // First delete all questions associated with the quiz
+        // Delete all images from S3
+        const deletePromises = [];
+        // Delete quiz images
+        for (const image of existingQuiz.images) {
+            const key = image.imageUrl.split('/').pop();
+            if (key) {
+                deletePromises.push((0, s3_1.deleteFromS3)(key));
+            }
+        }
+        // Delete question images
+        for (const question of existingQuiz.questions) {
+            for (const image of question.images) {
+                const key = image.imageUrl.split('/').pop();
+                if (key) {
+                    deletePromises.push((0, s3_1.deleteFromS3)(key));
+                }
+            }
+        }
+        // Wait for all image deletions to complete
+        yield Promise.all(deletePromises);
+        // Delete all questions associated with the quiz
         yield db_1.default.question.deleteMany({
             where: { quizId: id }
         });
@@ -174,7 +235,7 @@ const deleteQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         yield db_1.default.quiz.delete({
             where: { id }
         });
-        res.json({ message: 'Quiz deleted successfully' });
+        res.json({ message: 'Quiz and all associated images deleted successfully' });
     }
     catch (error) {
         console.error('Delete quiz error:', error);
@@ -206,6 +267,9 @@ const addQuestion = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 options: question.options,
                 correctAnswer: question.correctAnswer,
                 quizId
+            },
+            include: {
+                images: true, // Include question images
             }
         });
         return res.status(201).json(newQuestion);
@@ -226,7 +290,10 @@ const updateQuestion = (req, res) => __awaiter(void 0, void 0, void 0, function*
         }
         const question = yield db_1.default.question.findUnique({
             where: { id: questionId },
-            include: { quiz: true }
+            include: {
+                quiz: true,
+                images: true, // Include question images
+            }
         });
         if (!question) {
             return res.status(404).json({ error: 'Question not found' });
@@ -243,7 +310,10 @@ const updateQuestion = (req, res) => __awaiter(void 0, void 0, void 0, function*
         }
         const updatedQuestion = yield db_1.default.question.update({
             where: { id: questionId },
-            data: updates
+            data: updates,
+            include: {
+                images: true, // Include question images
+            }
         });
         return res.json(updatedQuestion);
     }
@@ -260,10 +330,13 @@ const deleteQuestion = (req, res) => __awaiter(void 0, void 0, void 0, function*
             res.status(401).json({ message: 'Unauthorized' });
             return;
         }
-        // Get the question with its quiz to check ownership
+        // Get the question with its quiz and images to check ownership
         const question = yield db_1.default.question.findUnique({
             where: { id: questionId },
-            include: { quiz: true }
+            include: {
+                quiz: true,
+                images: true
+            }
         });
         if (!question) {
             res.status(404).json({ message: 'Question not found' });
@@ -273,11 +346,21 @@ const deleteQuestion = (req, res) => __awaiter(void 0, void 0, void 0, function*
             res.status(403).json({ message: 'You can only delete questions from your own quizzes' });
             return;
         }
+        // Delete all images from S3
+        const deletePromises = question.images.map(image => {
+            const key = image.imageUrl.split('/').pop();
+            if (key) {
+                return (0, s3_1.deleteFromS3)(key);
+            }
+            return Promise.resolve();
+        });
+        // Wait for all image deletions to complete
+        yield Promise.all(deletePromises);
         // Delete question
         yield db_1.default.question.delete({
             where: { id: questionId }
         });
-        res.json({ message: 'Question deleted successfully' });
+        res.json({ message: 'Question and all associated images deleted successfully' });
     }
     catch (error) {
         console.error('Delete question error:', error);
@@ -429,3 +512,145 @@ const getQuizLeaderboard = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.getQuizLeaderboard = getQuizLeaderboard;
+const prismaClient = new client_1.PrismaClient();
+const searchQuizzes = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { searchTerm, sortBy = 'createdAt', sortOrder = 'desc', page = '1', limit = '10', teacherId, classId, isPublic, } = req.query;
+        const where = {};
+        if (searchTerm) {
+            where.OR = [
+                { title: { contains: searchTerm, mode: 'insensitive' } },
+                { description: { contains: searchTerm, mode: 'insensitive' } },
+            ];
+        }
+        if (teacherId) {
+            where.teacherId = teacherId;
+        }
+        if (classId) {
+            where.classId = classId;
+        }
+        if (isPublic !== undefined) {
+            where.isPublic = isPublic === 'true';
+        }
+        const pageNumber = parseInt(page, 10);
+        const limitNumber = parseInt(limit, 10);
+        const skip = (pageNumber - 1) * limitNumber;
+        const orderBy = {
+            [sortBy]: sortOrder,
+        };
+        const [quizzes, total] = yield Promise.all([
+            prismaClient.quiz.findMany({
+                where,
+                orderBy,
+                skip,
+                take: limitNumber,
+                include: {
+                    teacher: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true
+                        },
+                    },
+                    class: {
+                        select: { id: true, name: true },
+                    },
+                },
+            }),
+            prismaClient.quiz.count({ where }),
+        ]);
+        const totalPages = Math.ceil(total / limitNumber);
+        const hasNextPage = pageNumber < totalPages;
+        const hasPreviousPage = pageNumber > 1;
+        res.json({
+            quizzes,
+            pagination: {
+                total,
+                totalPages,
+                currentPage: pageNumber,
+                limit: limitNumber,
+                hasNextPage,
+                hasPreviousPage,
+            },
+        });
+    }
+    catch (error) {
+        console.error('Error searching quizzes:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+exports.searchQuizzes = searchQuizzes;
+const getQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const { id } = req.params;
+        const quiz = yield db_1.default.quiz.findUnique({
+            where: { id },
+            include: {
+                teacher: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+                questions: {
+                    include: {
+                        images: true, // Include question images
+                    },
+                },
+                images: true, // Include quiz images
+            },
+        });
+        if (!quiz) {
+            return res.status(404).json({ error: 'Quiz not found' });
+        }
+        // If quiz is not public and user is not the teacher, check password
+        if (!quiz.isPublic && quiz.teacherId !== ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id)) {
+            return res.status(403).json({ error: 'Quiz is not public' });
+        }
+        res.json(quiz);
+    }
+    catch (error) {
+        console.error('Error getting quiz:', error);
+        res.status(500).json({ error: 'Failed to get quiz' });
+    }
+});
+exports.getQuiz = getQuiz;
+const getQuizzes = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const quizzes = yield db_1.default.quiz.findMany({
+            where: {
+                OR: [
+                    { isPublic: true },
+                    { teacherId: (_a = req.user) === null || _a === void 0 ? void 0 : _a.id },
+                ],
+            },
+            include: {
+                teacher: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+                images: true, // Include quiz images
+                _count: {
+                    select: {
+                        questions: true,
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+        });
+        res.json(quizzes);
+    }
+    catch (error) {
+        console.error('Error getting quizzes:', error);
+        res.status(500).json({ error: 'Failed to get quizzes' });
+    }
+});
+exports.getQuizzes = getQuizzes;

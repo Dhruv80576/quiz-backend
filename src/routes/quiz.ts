@@ -11,7 +11,8 @@ import {
   validateQuizPassword,
   makeQuizPublic,
   submitQuiz,
-  getQuizLeaderboard
+  getQuizLeaderboard,
+  searchQuizzes
 } from '../controllers/quiz';
 
 const router = Router();
@@ -25,6 +26,9 @@ router.put('/:quizId/questions/:questionId', authenticateToken, (req: AuthReques
 router.delete('/:quizId/questions/:questionId', authenticateToken, (req: AuthRequest, res) => deleteQuestion(req, res));
 router.post('/:id/public', authenticateToken, (req: AuthRequest, res) => makeQuizPublic(req, res));
 router.post('/:id/submit', authenticateToken, (req: AuthRequest, res) => submitQuiz(req, res));
+
+// Search and filter quizzes
+router.get('/search', authenticateToken, (req: AuthRequest, res) => searchQuizzes(req, res));
 
 // Public route for password validation
 router.post('/:id/validate-password', (req, res) => validateQuizPassword(req, res));

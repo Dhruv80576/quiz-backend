@@ -6,6 +6,7 @@ import authRoutes from './routes/auth';
 import quizRoutes from './routes/quiz';
 import adminRoutes from './routes/adminRoutes';
 import classRoutes from './routes/classRoutes';
+import fileUploadRoutes from './routes/fileUpload';
 
 // Load environment variables first
 dotenv.config();
@@ -22,6 +23,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/quiz', quizRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/classes', classRoutes);
+app.use('/api/upload', fileUploadRoutes);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

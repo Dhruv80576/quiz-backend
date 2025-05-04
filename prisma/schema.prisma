@@ -20,6 +20,7 @@ model User {
   responses Response[]
   teachingClasses Class[]    @relation("TeacherClasses")
   enrolledClasses Class[]    @relation("StudentClasses")
+  resourceMaterials ResourceMaterial[]
 }
 
 enum Role {
@@ -43,6 +44,7 @@ model Quiz {
   responses   Response[]
   classId     String?
   class       Class?     @relation(fields: [classId], references: [id])
+  images      QuizImage[]
 }
 
 model Response {
@@ -72,6 +74,21 @@ model Question {
   correctAnswer Int          // For single/multiple select: index, for fill-in-blank: 0, for integer: exact number
   quizId        String
   quiz          Quiz         @relation(fields: [quizId], references: [id])
+  images        QuestionImage[]
+}
+
+model QuestionImage {
+  id        String   @id @default(uuid())
+  imageUrl  String   // S3 URL
+  fileName  String   // Original file name
+  fileSize  Int      // Size in bytes
+  fileType  String   // MIME type
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  question  Question @relation(fields: [questionId], references: [id])
+  questionId String
+
+  @@index([questionId])
 }
 
 model Class {
@@ -85,4 +102,38 @@ model Class {
   teacher     User     @relation("TeacherClasses", fields: [teacherId], references: [id])
   students    User[]   @relation("StudentClasses")
   quizzes     Quiz[]
+  resourceMaterials ResourceMaterial[]
+}
+
+model ResourceMaterial {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  fileUrl     String   // S3 URL
+  fileType    String   // MIME type
+  fileSize    Int      // Size in bytes
+  fileName    String   // Original file name
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  teacher     User     @relation(fields: [teacherId], references: [id])
+  teacherId   String
+  class       Class?   @relation(fields: [classId], references: [id])
+  classId     String?
+
+  @@index([teacherId])
+  @@index([classId])
+}
+
+model QuizImage {
+  id        String   @id @default(uuid())
+  imageUrl  String   // S3 URL
+  fileName  String   // Original file name
+  fileSize  Int      // Size in bytes
+  fileType  String   // MIME type
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  quiz      Quiz     @relation(fields: [quizId], references: [id])
+  quizId    String
+
+  @@index([quizId])
 }

@@ -12,8 +12,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getQuizLeaderboard = exports.submitQuiz = exports.makeQuizPublic = exports.validateQuizPassword = exports.deleteQuestion = exports.updateQuestion = exports.addQuestion = exports.deleteQuiz = exports.updateQuiz = exports.createQuiz = void 0;
+exports.getUserAttemptedQuizzes = exports.getQuizQuestions = exports.getQuizMetadata = exports.getResponseDetails = exports.getQuizzes = exports.getQuiz = exports.searchQuizzes = exports.getQuizLeaderboard = exports.submitQuiz = exports.makeQuizPublic = exports.validateQuizPassword = exports.deleteQuestion = exports.updateQuestion = exports.addQuestion = exports.deleteQuiz = exports.updateQuiz = exports.createQuiz = void 0;
 const db_1 = __importDefault(require("../config/db"));
+const client_1 = require("@prisma/client");
+const s3_1 = require("../config/s3");
 const validateQuestion = (question) => {
     if (!question.type)
         return false;
@@ -35,41 +37,59 @@ const validateQuestion = (question) => {
 };
 const calculateScore = (questions, answers) => {
     let score = 0;
-    answers.forEach(answer => {
-        const question = questions.find(q => q.id === answer.questionId);
-        if (!question)
+    let totalMarks = 0;
+    questions.forEach(question => {
+        totalMarks += question.marks || 1;
+        const answer = answers.find(a => a.questionId === question.id);
+        if (!answer)
             return;
+        let isCorrect = false;
+        let partialScore = 0;
         switch (question.type) {
             case 'SINGLE_SELECT':
-                if (answer.answer === question.correctAnswer)
-                    score++;
+                isCorrect = answer.answer === question.correctAnswer;
+                if (isCorrect) {
+                    score += question.marks || 1;
+                }
                 break;
             case 'MULTIPLE_SELECT':
-                if (Array.isArray(answer.answer) &&
-                    answer.answer.length === question.correctAnswer.length &&
-                    answer.answer.every(a => question.correctAnswer.includes(a))) {
-                    score++;
+                if (Array.isArray(answer.answer) && Array.isArray(question.correctAnswer)) {
+                    const correctAnswers = question.correctAnswer;
+                    const userAnswers = answer.answer;
+                    // Calculate partial score based only on correct selections
+                    const correctCount = userAnswers.filter((a) => correctAnswers.includes(a)).length;
+                    // Award partial marks based on correct selections only
+                    const questionMarks = question.marks || 1;
+                    const marksPerOption = questionMarks / correctAnswers.length;
+                    // Only award marks for correct selections
+                    partialScore = correctCount * marksPerOption;
+                    score += partialScore;
                 }
                 break;
             case 'FILL_IN_BLANK':
-                if (answer.answer === question.correctAnswer)
-                    score++;
+                isCorrect = answer.answer === question.correctAnswer;
+                if (isCorrect) {
+                    score += question.marks || 1;
+                }
                 break;
             case 'INTEGER':
-                if (Number(answer.answer) === question.correctAnswer)
-                    score++;
+                isCorrect = Number(answer.answer) === question.correctAnswer;
+                if (isCorrect) {
+                    score += question.marks || 1;
+                }
                 break;
         }
     });
-    return score;
+    return { score, totalMarks };
 };
 const createQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { title, description, duration, isPublic, password, questions } = req.body;
-        // Validate questions
-        if (!questions.every(validateQuestion)) {
-            return res.status(400).json({ error: 'Invalid question format' });
+        if (!req.user) {
+            return res.status(401).json({ error: 'Unauthorized' });
         }
+        // Calculate total marks from questions
+        const totalMarks = questions.reduce((sum, q) => sum + (q.marks || 1), 0);
         const quiz = yield db_1.default.quiz.create({
             data: {
                 title,
@@ -78,17 +98,20 @@ const createQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 isPublic: isPublic !== null && isPublic !== void 0 ? isPublic : false,
                 password: password || null,
                 teacherId: req.user.id,
+                totalMarks,
                 questions: {
-                    create: questions.map(q => ({
+                    create: questions.map((q) => ({
                         text: q.text,
                         type: q.type,
                         options: q.options,
-                        correctAnswer: q.correctAnswer
+                        correctAnswer: q.correctAnswer,
+                        marks: q.marks || 1
                     }))
                 }
             },
             include: {
-                questions: true
+                questions: true,
+                images: true
             }
         });
         return res.status(201).json(quiz);
@@ -102,7 +125,7 @@ exports.createQuiz = createQuiz;
 const updateQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        const { title, description, duration, isPublic, password } = req.body;
+        const { title, description, duration, isPublic, password, imagesToDelete } = req.body;
         if (!req.user) {
             res.status(401).json({ message: 'Unauthorized' });
             return;
@@ -110,7 +133,14 @@ const updateQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         // Check if quiz exists and belongs to the teacher
         const existingQuiz = yield db_1.default.quiz.findUnique({
             where: { id },
-            include: { questions: true }
+            include: {
+                questions: {
+                    include: {
+                        images: true,
+                    },
+                },
+                images: true,
+            }
         });
         if (!existingQuiz) {
             res.status(404).json({ message: 'Quiz not found' });
@@ -120,25 +150,44 @@ const updateQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             res.status(403).json({ message: 'You can only update your own quizzes' });
             return;
         }
+        // Delete specified images if any
+        if (imagesToDelete && imagesToDelete.length > 0) {
+            const imagesToRemove = existingQuiz.images.filter(img => imagesToDelete.includes(img.id));
+            // Delete images from S3
+            const deletePromises = imagesToRemove.map(image => {
+                const key = image.imageUrl.split('/').pop();
+                if (key) {
+                    return (0, s3_1.deleteFromS3)(key);
+                }
+                return Promise.resolve();
+            });
+            // Wait for all image deletions to complete
+            yield Promise.all(deletePromises);
+            // Delete image records from database
+            yield db_1.default.quizImage.deleteMany({
+                where: {
+                    id: {
+                        in: imagesToDelete
+                    }
+                }
+            });
+        }
         // Update quiz with only the provided fields
         const updatedQuiz = yield db_1.default.quiz.update({
             where: { id },
             data: Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({}, (title && { title })), (description && { description })), (duration && { duration })), (isPublic !== undefined && { isPublic })), (password !== undefined && { password: password || null })),
             include: {
-                questions: true
+                questions: {
+                    include: {
+                        images: true,
+                    },
+                },
+                images: true,
             }
         });
         res.json({
             message: 'Quiz updated successfully',
-            quiz: {
-                id: updatedQuiz.id,
-                title: updatedQuiz.title,
-                description: updatedQuiz.description,
-                duration: updatedQuiz.duration,
-                isPublic: updatedQuiz.isPublic,
-                password: updatedQuiz.password,
-                questions: updatedQuiz.questions
-            }
+            quiz: updatedQuiz
         });
     }
     catch (error) {
@@ -156,7 +205,15 @@ const deleteQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         }
         // Check if quiz exists and belongs to the teacher
         const existingQuiz = yield db_1.default.quiz.findUnique({
-            where: { id }
+            where: { id },
+            include: {
+                images: true,
+                questions: {
+                    include: {
+                        images: true
+                    }
+                }
+            }
         });
         if (!existingQuiz) {
             res.status(404).json({ message: 'Quiz not found' });
@@ -166,7 +223,27 @@ const deleteQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             res.status(403).json({ message: 'You can only delete your own quizzes' });
             return;
         }
-        // First delete all questions associated with the quiz
+        // Delete all images from S3
+        const deletePromises = [];
+        // Delete quiz images
+        for (const image of existingQuiz.images) {
+            const key = image.imageUrl.split('/').pop();
+            if (key) {
+                deletePromises.push((0, s3_1.deleteFromS3)(key));
+            }
+        }
+        // Delete question images
+        for (const question of existingQuiz.questions) {
+            for (const image of question.images) {
+                const key = image.imageUrl.split('/').pop();
+                if (key) {
+                    deletePromises.push((0, s3_1.deleteFromS3)(key));
+                }
+            }
+        }
+        // Wait for all image deletions to complete
+        yield Promise.all(deletePromises);
+        // Delete all questions associated with the quiz
         yield db_1.default.question.deleteMany({
             where: { quizId: id }
         });
@@ -174,7 +251,7 @@ const deleteQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         yield db_1.default.quiz.delete({
             where: { id }
         });
-        res.json({ message: 'Quiz deleted successfully' });
+        res.json({ message: 'Quiz and all associated images deleted successfully' });
     }
     catch (error) {
         console.error('Delete quiz error:', error);
@@ -206,6 +283,9 @@ const addQuestion = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 options: question.options,
                 correctAnswer: question.correctAnswer,
                 quizId
+            },
+            include: {
+                images: true, // Include question images
             }
         });
         return res.status(201).json(newQuestion);
@@ -226,7 +306,10 @@ const updateQuestion = (req, res) => __awaiter(void 0, void 0, void 0, function*
         }
         const question = yield db_1.default.question.findUnique({
             where: { id: questionId },
-            include: { quiz: true }
+            include: {
+                quiz: true,
+                images: true, // Include question images
+            }
         });
         if (!question) {
             return res.status(404).json({ error: 'Question not found' });
@@ -243,7 +326,10 @@ const updateQuestion = (req, res) => __awaiter(void 0, void 0, void 0, function*
         }
         const updatedQuestion = yield db_1.default.question.update({
             where: { id: questionId },
-            data: updates
+            data: updates,
+            include: {
+                images: true, // Include question images
+            }
         });
         return res.json(updatedQuestion);
     }
@@ -260,10 +346,13 @@ const deleteQuestion = (req, res) => __awaiter(void 0, void 0, void 0, function*
             res.status(401).json({ message: 'Unauthorized' });
             return;
         }
-        // Get the question with its quiz to check ownership
+        // Get the question with its quiz and images to check ownership
         const question = yield db_1.default.question.findUnique({
             where: { id: questionId },
-            include: { quiz: true }
+            include: {
+                quiz: true,
+                images: true
+            }
         });
         if (!question) {
             res.status(404).json({ message: 'Question not found' });
@@ -273,11 +362,21 @@ const deleteQuestion = (req, res) => __awaiter(void 0, void 0, void 0, function*
             res.status(403).json({ message: 'You can only delete questions from your own quizzes' });
             return;
         }
+        // Delete all images from S3
+        const deletePromises = question.images.map(image => {
+            const key = image.imageUrl.split('/').pop();
+            if (key) {
+                return (0, s3_1.deleteFromS3)(key);
+            }
+            return Promise.resolve();
+        });
+        // Wait for all image deletions to complete
+        yield Promise.all(deletePromises);
         // Delete question
         yield db_1.default.question.delete({
             where: { id: questionId }
         });
-        res.json({ message: 'Question deleted successfully' });
+        res.json({ message: 'Question and all associated images deleted successfully' });
     }
     catch (error) {
         console.error('Delete question error:', error);
@@ -341,34 +440,58 @@ const makeQuizPublic = (req, res) => __awaiter(void 0, void 0, void 0, function*
 exports.makeQuizPublic = makeQuizPublic;
 const submitQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { id } = req.params;
+        const { quizId } = req.params;
         const { answers } = req.body;
         if (!req.user) {
             return res.status(401).json({ error: 'Unauthorized' });
         }
-        // Get quiz with questions
+        // Check if user has already submitted this quiz
+        const existingResponse = yield db_1.default.response.findFirst({
+            where: {
+                quizId,
+                userId: req.user.id
+            }
+        });
+        if (existingResponse) {
+            return res.status(400).json({ error: 'You have already submitted this quiz' });
+        }
+        // Get quiz with questions to validate answers
         const quiz = yield db_1.default.quiz.findUnique({
-            where: { id },
-            include: { questions: true }
+            where: { id: quizId },
+            include: {
+                questions: true
+            }
         });
         if (!quiz) {
             return res.status(404).json({ error: 'Quiz not found' });
         }
         // Calculate score
-        const score = calculateScore(quiz.questions, answers);
-        // Store response
-        const response = yield db_1.default.response.create({
-            data: {
-                quizId: id,
-                userId: req.user.id,
-                answers: answers, // Type assertion for Prisma JSON field
-                score: score
-            }
-        });
+        const { score, totalMarks } = calculateScore(quiz.questions, answers);
+        // Create response and increment uniqueAttempts in a transaction
+        const [response] = yield db_1.default.$transaction([
+            db_1.default.response.create({
+                data: {
+                    quizId,
+                    userId: req.user.id,
+                    answers,
+                    score,
+                    totalMarks
+                }
+            }),
+            db_1.default.quiz.update({
+                where: { id: quizId },
+                data: {
+                    uniqueAttempts: {
+                        increment: 1
+                    }
+                }
+            })
+        ]);
         return res.json({
             message: 'Quiz submitted successfully',
-            score: score,
-            totalQuestions: quiz.questions.length
+            score,
+            totalMarks,
+            percentage: Math.round((score / totalMarks) * 100)
         });
     }
     catch (error) {
@@ -429,3 +552,380 @@ const getQuizLeaderboard = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.getQuizLeaderboard = getQuizLeaderboard;
+const prismaClient = new client_1.PrismaClient();
+const searchQuizzes = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { searchTerm, sortBy = 'createdAt', sortOrder = 'desc', page = '1', limit = '10', teacherId, classId, isPublic, } = req.query;
+        const where = {};
+        if (searchTerm) {
+            where.OR = [
+                { title: { contains: searchTerm, mode: 'insensitive' } },
+                { description: { contains: searchTerm, mode: 'insensitive' } },
+            ];
+        }
+        if (teacherId) {
+            where.teacherId = teacherId;
+        }
+        if (classId) {
+            where.classId = classId;
+        }
+        if (isPublic !== undefined) {
+            where.isPublic = isPublic === 'true';
+        }
+        const pageNumber = parseInt(page, 10);
+        const limitNumber = parseInt(limit, 10);
+        const skip = (pageNumber - 1) * limitNumber;
+        const orderBy = {
+            [sortBy]: sortOrder,
+        };
+        const [quizzes, total] = yield Promise.all([
+            prismaClient.quiz.findMany({
+                where,
+                orderBy,
+                skip,
+                take: limitNumber,
+                include: {
+                    teacher: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true
+                        },
+                    },
+                    class: {
+                        select: { id: true, name: true },
+                    },
+                },
+            }),
+            prismaClient.quiz.count({ where }),
+        ]);
+        const totalPages = Math.ceil(total / limitNumber);
+        const hasNextPage = pageNumber < totalPages;
+        const hasPreviousPage = pageNumber > 1;
+        res.json({
+            quizzes,
+            pagination: {
+                total,
+                totalPages,
+                currentPage: pageNumber,
+                limit: limitNumber,
+                hasNextPage,
+                hasPreviousPage,
+            },
+        });
+    }
+    catch (error) {
+        console.error('Error searching quizzes:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+exports.searchQuizzes = searchQuizzes;
+const getQuiz = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const { id } = req.params;
+        const quiz = yield db_1.default.quiz.findUnique({
+            where: { id },
+            include: {
+                teacher: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+                questions: {
+                    include: {
+                        images: true, // Include question images
+                    },
+                },
+                images: true, // Include quiz images
+            },
+        });
+        if (!quiz) {
+            return res.status(404).json({ error: 'Quiz not found' });
+        }
+        // If quiz is not public and user is not the teacher, check password
+        if (!quiz.isPublic && quiz.teacherId !== ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id)) {
+            return res.status(403).json({ error: 'Quiz is not public' });
+        }
+        res.json(quiz);
+    }
+    catch (error) {
+        console.error('Error getting quiz:', error);
+        res.status(500).json({ error: 'Failed to get quiz' });
+    }
+});
+exports.getQuiz = getQuiz;
+const getQuizzes = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const quizzes = yield db_1.default.quiz.findMany({
+            where: {
+                OR: [
+                    { isPublic: true },
+                    { teacherId: (_a = req.user) === null || _a === void 0 ? void 0 : _a.id },
+                ],
+            },
+            include: {
+                teacher: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+                images: true, // Include quiz images
+                _count: {
+                    select: {
+                        questions: true,
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+        });
+        res.json(quizzes);
+    }
+    catch (error) {
+        console.error('Error getting quizzes:', error);
+        res.status(500).json({ error: 'Failed to get quizzes' });
+    }
+});
+exports.getQuizzes = getQuizzes;
+const getResponseDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { quizId, responseId } = req.params;
+        if (!req.user) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        // Get response with quiz and questions
+        const response = yield db_1.default.response.findUnique({
+            where: {
+                id: responseId,
+                quizId: quizId
+            },
+            include: {
+                quiz: {
+                    include: {
+                        questions: true
+                    }
+                }
+            }
+        });
+        if (!response) {
+            return res.status(404).json({ error: 'Response not found' });
+        }
+        // Check if user is authorized to view this response
+        if (response.userId !== req.user.id && response.quiz.teacherId !== req.user.id) {
+            return res.status(403).json({ error: 'Not authorized to view this response' });
+        }
+        // Format response details
+        const responseDetails = {
+            quizTitle: response.quiz.title,
+            score: response.score,
+            totalMarks: response.totalMarks,
+            percentage: Math.round((response.score / response.totalMarks) * 100),
+            submittedAt: response.createdAt,
+            questions: response.quiz.questions.map(question => {
+                const userAnswers = response.answers;
+                const userAnswer = userAnswers.find(a => a.questionId === question.id);
+                let isCorrect = false;
+                let obtainedMarks = 0;
+                // Calculate if answer is correct and marks obtained
+                switch (question.type) {
+                    case 'SINGLE_SELECT':
+                        isCorrect = (userAnswer === null || userAnswer === void 0 ? void 0 : userAnswer.answer) === question.correctAnswer;
+                        obtainedMarks = isCorrect ? question.marks : 0;
+                        break;
+                    case 'MULTIPLE_SELECT':
+                        if (Array.isArray(userAnswer === null || userAnswer === void 0 ? void 0 : userAnswer.answer) && Array.isArray(question.correctAnswer)) {
+                            const correctAnswers = question.correctAnswer;
+                            const correctCount = userAnswer.answer.filter((a) => correctAnswers.includes(a)).length;
+                            const marksPerOption = question.marks / correctAnswers.length;
+                            obtainedMarks = correctCount * marksPerOption;
+                            isCorrect = correctCount === correctAnswers.length;
+                        }
+                        break;
+                    case 'FILL_IN_BLANK':
+                        isCorrect = (userAnswer === null || userAnswer === void 0 ? void 0 : userAnswer.answer) === question.correctAnswer;
+                        obtainedMarks = isCorrect ? question.marks : 0;
+                        break;
+                    case 'INTEGER':
+                        isCorrect = Number(userAnswer === null || userAnswer === void 0 ? void 0 : userAnswer.answer) === question.correctAnswer;
+                        obtainedMarks = isCorrect ? question.marks : 0;
+                        break;
+                }
+                return {
+                    id: question.id,
+                    text: question.text,
+                    type: question.type,
+                    options: question.options,
+                    correctAnswer: question.correctAnswer,
+                    userAnswer: userAnswer === null || userAnswer === void 0 ? void 0 : userAnswer.answer,
+                    isCorrect,
+                    marks: question.marks,
+                    obtainedMarks
+                };
+            })
+        };
+        return res.json(responseDetails);
+    }
+    catch (error) {
+        console.error('Error getting response details:', error);
+        return res.status(500).json({ error: 'Failed to get response details' });
+    }
+});
+exports.getResponseDetails = getResponseDetails;
+const getQuizMetadata = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        if (!req.user) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        const quiz = yield db_1.default.quiz.findUnique({
+            where: { id },
+            include: {
+                teacher: {
+                    select: {
+                        id: true,
+                        email: true,
+                        name: true
+                    }
+                },
+                images: true,
+                _count: {
+                    select: {
+                        questions: true
+                    }
+                }
+            }
+        });
+        if (!quiz) {
+            return res.status(404).json({ error: 'Quiz not found' });
+        }
+        // Check if user is authorized to view this quiz
+        if (!quiz.isPublic && quiz.teacherId !== req.user.id) {
+            return res.status(403).json({ error: 'Not authorized to view this quiz' });
+        }
+        // Return only metadata
+        return res.json({
+            id: quiz.id,
+            title: quiz.title,
+            description: quiz.description,
+            duration: quiz.duration,
+            isPublic: quiz.isPublic,
+            totalMarks: quiz.totalMarks,
+            uniqueAttempts: quiz.uniqueAttempts,
+            createdAt: quiz.createdAt,
+            updatedAt: quiz.updatedAt,
+            teacher: quiz.teacher,
+            images: quiz.images,
+            questionCount: quiz._count.questions
+        });
+    }
+    catch (error) {
+        console.error('Error getting quiz metadata:', error);
+        return res.status(500).json({ error: 'Failed to get quiz metadata' });
+    }
+});
+exports.getQuizMetadata = getQuizMetadata;
+const getQuizQuestions = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        if (!req.user) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        const quiz = yield db_1.default.quiz.findUnique({
+            where: { id },
+            include: {
+                questions: {
+                    include: {
+                        images: true
+                    }
+                }
+            }
+        });
+        if (!quiz) {
+            return res.status(404).json({ error: 'Quiz not found' });
+        }
+        // Check if user is authorized to view this quiz
+        if (!quiz.isPublic && quiz.teacherId !== req.user.id) {
+            return res.status(403).json({ error: 'Not authorized to view this quiz' });
+        }
+        // Return questions without correct answers
+        const questions = quiz.questions.map(question => ({
+            id: question.id,
+            text: question.text,
+            type: question.type,
+            options: question.options,
+            marks: question.marks,
+            images: question.images
+        }));
+        return res.json({
+            quizId: quiz.id,
+            title: quiz.title,
+            questions
+        });
+    }
+    catch (error) {
+        console.error('Error getting quiz questions:', error);
+        return res.status(500).json({ error: 'Failed to get quiz questions' });
+    }
+});
+exports.getQuizQuestions = getQuizQuestions;
+const getUserAttemptedQuizzes = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        // Get all responses for the user with quiz details
+        const responses = yield db_1.default.response.findMany({
+            where: {
+                userId: req.user.id
+            },
+            include: {
+                quiz: {
+                    include: {
+                        teacher: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true
+                            }
+                        },
+                        _count: {
+                            select: {
+                                questions: true
+                            }
+                        }
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+        // Format the response
+        const attemptedQuizzes = responses.map(response => ({
+            quizId: response.quiz.id,
+            quizTitle: response.quiz.title,
+            teacher: response.quiz.teacher,
+            score: response.score,
+            totalMarks: response.totalMarks,
+            percentage: Math.round((response.score / response.totalMarks) * 100),
+            totalQuestions: response.quiz._count.questions,
+            submittedAt: response.createdAt
+        }));
+        return res.json({
+            totalAttempts: attemptedQuizzes.length,
+            quizzes: attemptedQuizzes
+        });
+    }
+    catch (error) {
+        console.error('Error getting user attempted quizzes:', error);
+        return res.status(500).json({ error: 'Failed to get attempted quizzes' });
+    }
+});
+exports.getUserAttemptedQuizzes = getUserAttemptedQuizzes;

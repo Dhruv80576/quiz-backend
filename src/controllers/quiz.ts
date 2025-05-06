@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../types';
 import prisma from '../config/db';
 import { Question } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
+import { deleteFromS3 } from '../config/s3';
 
 type QuestionType = Question['type'];
 
@@ -16,6 +18,7 @@ interface CreateQuizRequest {
     type: QuestionType;
     options: string[];
     correctAnswer: number;
+    marks?: number;
   }[];
 }
 
@@ -25,6 +28,7 @@ interface UpdateQuizRequest {
   duration?: number;
   isPublic?: boolean;
   password?: string;
+  imagesToDelete?: string[];
 }
 
 interface CreateQuestionRequest {
@@ -32,6 +36,7 @@ interface CreateQuestionRequest {
   type: QuestionType;
   options: string[];
   correctAnswer: number;
+  marks?: number;
 }
 
 interface UpdateQuestionRequest {
@@ -39,6 +44,7 @@ interface UpdateQuestionRequest {
   type?: QuestionType;
   options?: string[];
   correctAnswer?: number;
+  marks?: number;
 }
 
 interface QuestionResponse {
@@ -78,44 +84,74 @@ const validateQuestion = (question: CreateQuestionRequest | UpdateQuestionReques
   }
 };
 
-const calculateScore = (questions: any[], answers: QuizAnswer[]): number => {
+const calculateScore = (questions: any[], answers: QuizAnswer[]): { score: number; totalMarks: number } => {
   let score = 0;
+  let totalMarks = 0;
   
-  answers.forEach(answer => {
-    const question = questions.find(q => q.id === answer.questionId);
-    if (!question) return;
+  questions.forEach(question => {
+    totalMarks += question.marks || 1;
+    const answer = answers.find(a => a.questionId === question.id);
+    if (!answer) return;
+
+    let isCorrect = false;
+    let partialScore = 0;
 
     switch (question.type) {
       case 'SINGLE_SELECT':
-        if (answer.answer === question.correctAnswer) score++;
-        break;
-      case 'MULTIPLE_SELECT':
-        if (Array.isArray(answer.answer) && 
-            answer.answer.length === question.correctAnswer.length &&
-            answer.answer.every(a => question.correctAnswer.includes(a))) {
-          score++;
+        isCorrect = answer.answer === question.correctAnswer;
+        if (isCorrect) {
+          score += question.marks || 1;
         }
         break;
-      case 'FILL_IN_BLANK':
-        if (answer.answer === question.correctAnswer) score++;
+
+      case 'MULTIPLE_SELECT':
+        if (Array.isArray(answer.answer) && Array.isArray(question.correctAnswer)) {
+          const correctAnswers = question.correctAnswer;
+          const userAnswers = answer.answer;
+          
+          // Calculate partial score based only on correct selections
+          const correctCount = userAnswers.filter((a: number) => correctAnswers.includes(a)).length;
+          
+          // Award partial marks based on correct selections only
+          const questionMarks = question.marks || 1;
+          const marksPerOption = questionMarks / correctAnswers.length;
+          
+          // Only award marks for correct selections
+          partialScore = correctCount * marksPerOption;
+          
+          score += partialScore;
+        }
         break;
+
+      case 'FILL_IN_BLANK':
+        isCorrect = answer.answer === question.correctAnswer;
+        if (isCorrect) {
+          score += question.marks || 1;
+        }
+        break;
+
       case 'INTEGER':
-        if (Number(answer.answer) === question.correctAnswer) score++;
+        isCorrect = Number(answer.answer) === question.correctAnswer;
+        if (isCorrect) {
+          score += question.marks || 1;
+        }
         break;
     }
   });
 
-  return score;
+  return { score, totalMarks };
 };
 
 export const createQuiz = async (req: AuthRequest, res: Response) => {
   try {
     const { title, description, duration, isPublic, password, questions } = req.body as CreateQuizRequest;
 
-    // Validate questions
-    if (!questions.every(validateQuestion)) {
-      return res.status(400).json({ error: 'Invalid question format' });
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
+
+    // Calculate total marks from questions
+    const totalMarks = questions.reduce((sum: number, q: any) => sum + (q.marks || 1), 0);
 
     const quiz = await prisma.quiz.create({
       data: {
@@ -124,18 +160,21 @@ export const createQuiz = async (req: AuthRequest, res: Response) => {
         duration,
         isPublic: isPublic ?? false,
         password: password || null,
-        teacherId: req.user!.id,
+        teacherId: req.user.id,
+        totalMarks,
         questions: {
-          create: questions.map(q => ({
+          create: questions.map((q: any) => ({
             text: q.text,
             type: q.type,
             options: q.options,
-            correctAnswer: q.correctAnswer
+            correctAnswer: q.correctAnswer,
+            marks: q.marks || 1
           }))
         }
       },
       include: {
-        questions: true
+        questions: true,
+        images: true
       }
     });
 
@@ -149,7 +188,7 @@ export const createQuiz = async (req: AuthRequest, res: Response) => {
 export const updateQuiz = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { title, description, duration, isPublic, password } = req.body as UpdateQuizRequest;
+    const { title, description, duration, isPublic, password, imagesToDelete } = req.body as UpdateQuizRequest & { imagesToDelete?: string[] };
     
     if (!req.user) {
       res.status(401).json({ message: 'Unauthorized' });
@@ -159,7 +198,14 @@ export const updateQuiz = async (req: AuthRequest, res: Response): Promise<void>
     // Check if quiz exists and belongs to the teacher
     const existingQuiz = await prisma.quiz.findUnique({
       where: { id },
-      include: { questions: true }
+      include: { 
+        questions: {
+          include: {
+            images: true,
+          },
+        },
+        images: true,
+      }
     });
 
     if (!existingQuiz) {
@@ -170,6 +216,32 @@ export const updateQuiz = async (req: AuthRequest, res: Response): Promise<void>
     if (existingQuiz.teacherId !== req.user.id) {
       res.status(403).json({ message: 'You can only update your own quizzes' });
       return;
+    }
+
+    // Delete specified images if any
+    if (imagesToDelete && imagesToDelete.length > 0) {
+      const imagesToRemove = existingQuiz.images.filter(img => imagesToDelete.includes(img.id));
+      
+      // Delete images from S3
+      const deletePromises = imagesToRemove.map(image => {
+        const key = image.imageUrl.split('/').pop();
+        if (key) {
+          return deleteFromS3(key);
+        }
+        return Promise.resolve();
+      });
+
+      // Wait for all image deletions to complete
+      await Promise.all(deletePromises);
+
+      // Delete image records from database
+      await prisma.quizImage.deleteMany({
+        where: {
+          id: {
+            in: imagesToDelete
+          }
+        }
+      });
     }
 
     // Update quiz with only the provided fields
@@ -183,21 +255,18 @@ export const updateQuiz = async (req: AuthRequest, res: Response): Promise<void>
         ...(password !== undefined && { password: password || null })
       },
       include: {
-        questions: true
+        questions: {
+          include: {
+            images: true,
+          },
+        },
+        images: true,
       }
     });
 
     res.json({
       message: 'Quiz updated successfully',
-      quiz: {
-        id: updatedQuiz.id,
-        title: updatedQuiz.title,
-        description: updatedQuiz.description,
-        duration: updatedQuiz.duration,
-        isPublic: updatedQuiz.isPublic,
-        password: updatedQuiz.password,
-        questions: updatedQuiz.questions
-      }
+      quiz: updatedQuiz
     });
   } catch (error) {
     console.error('Update quiz error:', error);
@@ -216,7 +285,15 @@ export const deleteQuiz = async (req: AuthRequest, res: Response): Promise<void>
 
     // Check if quiz exists and belongs to the teacher
     const existingQuiz = await prisma.quiz.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        images: true,
+        questions: {
+          include: {
+            images: true
+          }
+        }
+      }
     });
 
     if (!existingQuiz) {
@@ -229,7 +306,31 @@ export const deleteQuiz = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    // First delete all questions associated with the quiz
+    // Delete all images from S3
+    const deletePromises = [];
+
+    // Delete quiz images
+    for (const image of existingQuiz.images) {
+      const key = image.imageUrl.split('/').pop();
+      if (key) {
+        deletePromises.push(deleteFromS3(key));
+      }
+    }
+
+    // Delete question images
+    for (const question of existingQuiz.questions) {
+      for (const image of question.images) {
+        const key = image.imageUrl.split('/').pop();
+        if (key) {
+          deletePromises.push(deleteFromS3(key));
+        }
+      }
+    }
+
+    // Wait for all image deletions to complete
+    await Promise.all(deletePromises);
+
+    // Delete all questions associated with the quiz
     await prisma.question.deleteMany({
       where: { quizId: id }
     });
@@ -239,7 +340,7 @@ export const deleteQuiz = async (req: AuthRequest, res: Response): Promise<void>
       where: { id }
     });
 
-    res.json({ message: 'Quiz deleted successfully' });
+    res.json({ message: 'Quiz and all associated images deleted successfully' });
   } catch (error) {
     console.error('Delete quiz error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -275,6 +376,9 @@ export const addQuestion = async (req: AuthRequest, res: Response) => {
         options: question.options,
         correctAnswer: question.correctAnswer,
         quizId
+      },
+      include: {
+        images: true, // Include question images
       }
     });
 
@@ -296,7 +400,10 @@ export const updateQuestion = async (req: AuthRequest, res: Response) => {
 
     const question = await prisma.question.findUnique({
       where: { id: questionId },
-      include: { quiz: true }
+      include: { 
+        quiz: true,
+        images: true, // Include question images
+      }
     });
 
     if (!question) {
@@ -323,7 +430,10 @@ export const updateQuestion = async (req: AuthRequest, res: Response) => {
 
     const updatedQuestion = await prisma.question.update({
       where: { id: questionId },
-      data: updates
+      data: updates,
+      include: {
+        images: true, // Include question images
+      }
     });
 
     return res.json(updatedQuestion);
@@ -342,10 +452,13 @@ export const deleteQuestion = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Get the question with its quiz to check ownership
+    // Get the question with its quiz and images to check ownership
     const question = await prisma.question.findUnique({
       where: { id: questionId },
-      include: { quiz: true }
+      include: { 
+        quiz: true,
+        images: true
+      }
     });
 
     if (!question) {
@@ -358,12 +471,24 @@ export const deleteQuestion = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    // Delete all images from S3
+    const deletePromises = question.images.map(image => {
+      const key = image.imageUrl.split('/').pop();
+      if (key) {
+        return deleteFromS3(key);
+      }
+      return Promise.resolve();
+    });
+
+    // Wait for all image deletions to complete
+    await Promise.all(deletePromises);
+
     // Delete question
     await prisma.question.delete({
       where: { id: questionId }
     });
 
-    res.json({ message: 'Question deleted successfully' });
+    res.json({ message: 'Question and all associated images deleted successfully' });
   } catch (error) {
     console.error('Delete question error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -436,17 +561,31 @@ export const makeQuizPublic = async (req: AuthRequest, res: Response) => {
 
 export const submitQuiz = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const { answers } = req.body as SubmitQuizRequest;
-    
+    const { quizId } = req.params;
+    const { answers } = req.body;
+
     if (!req.user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Get quiz with questions
+    // Check if user has already submitted this quiz
+    const existingResponse = await prisma.response.findFirst({
+      where: {
+        quizId,
+        userId: req.user.id
+      }
+    });
+
+    if (existingResponse) {
+      return res.status(400).json({ error: 'You have already submitted this quiz' });
+    }
+
+    // Get quiz with questions to validate answers
     const quiz = await prisma.quiz.findUnique({
-      where: { id },
-      include: { questions: true }
+      where: { id: quizId },
+      include: {
+        questions: true
+      }
     });
 
     if (!quiz) {
@@ -454,22 +593,34 @@ export const submitQuiz = async (req: AuthRequest, res: Response) => {
     }
 
     // Calculate score
-    const score = calculateScore(quiz.questions, answers);
+    const { score, totalMarks } = calculateScore(quiz.questions, answers);
 
-    // Store response
-    const response = await prisma.response.create({
-      data: {
-        quizId: id,
-        userId: req.user.id,
-        answers: answers as any, // Type assertion for Prisma JSON field
-        score: score
-      }
-    });
+    // Create response and increment uniqueAttempts in a transaction
+    const [response] = await prisma.$transaction([
+      prisma.response.create({
+        data: {
+          quizId,
+          userId: req.user.id,
+          answers,
+          score,
+          totalMarks
+        }
+      }),
+      prisma.quiz.update({
+        where: { id: quizId },
+        data: {
+          uniqueAttempts: {
+            increment: 1
+          }
+        }
+      })
+    ]);
 
     return res.json({
       message: 'Quiz submitted successfully',
-      score: score,
-      totalQuestions: quiz.questions.length
+      score,
+      totalMarks,
+      percentage: Math.round((score / totalMarks) * 100)
     });
   } catch (error) {
     console.error('Error submitting quiz:', error);
@@ -530,4 +681,411 @@ export const getQuizLeaderboard = async (req: Request, res: Response) => {
     console.error('Error fetching leaderboard:', error);
     return res.status(500).json({ error: 'Failed to fetch leaderboard' });
   }
-}; 
+};
+
+const prismaClient = new PrismaClient();
+
+export const searchQuizzes = async (req: Request, res: Response) => {
+  try {
+    const {
+      searchTerm,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      page = '1',
+      limit = '10',
+      teacherId,
+      classId,
+      isPublic,
+    } = req.query;
+
+    const where: Prisma.QuizWhereInput = {};
+    if (searchTerm) {
+      where.OR = [
+        { title: { contains: searchTerm as string, mode: 'insensitive' } },
+        { description: { contains: searchTerm as string, mode: 'insensitive' } },
+      ];
+    }
+    if (teacherId) {
+      where.teacherId = teacherId as string;
+    }
+    if (classId) {
+      where.classId = classId as string;
+    }
+    if (isPublic !== undefined) {
+      where.isPublic = isPublic === 'true';
+    }
+    const pageNumber = parseInt(page as string, 10);
+    const limitNumber = parseInt(limit as string, 10);
+    const skip = (pageNumber - 1) * limitNumber;
+    const orderBy: Prisma.QuizOrderByWithRelationInput = {
+      [sortBy as keyof Prisma.QuizOrderByWithRelationInput]: sortOrder as 'asc' | 'desc',
+    };
+    const [quizzes, total] = await Promise.all([
+      prismaClient.quiz.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limitNumber,
+        include: {
+          teacher: {
+            select: {
+              id: true,
+              name: true,
+              email: true },
+          },
+          class: {
+            select: { id: true, name: true },
+          },
+        },
+      }),
+      prismaClient.quiz.count({ where }),
+    ]);
+    const totalPages = Math.ceil(total / limitNumber);
+    const hasNextPage = pageNumber < totalPages;
+    const hasPreviousPage = pageNumber > 1;
+    res.json({
+      quizzes,
+      pagination: {
+        total,
+        totalPages,
+        currentPage: pageNumber,
+        limit: limitNumber,
+        hasNextPage,
+        hasPreviousPage,
+      },
+    });
+  } catch (error) {
+    console.error('Error searching quizzes:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const getQuiz = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const quiz = await prisma.quiz.findUnique({
+      where: { id },
+      include: {
+        teacher: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        questions: {
+          include: {
+            images: true, // Include question images
+          },
+        },
+        images: true, // Include quiz images
+      },
+    });
+
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    // If quiz is not public and user is not the teacher, check password
+    if (!quiz.isPublic && quiz.teacherId !== req.user?.id) {
+      return res.status(403).json({ error: 'Quiz is not public' });
+    }
+
+    res.json(quiz);
+  } catch (error) {
+    console.error('Error getting quiz:', error);
+    res.status(500).json({ error: 'Failed to get quiz' });
+  }
+};
+
+export const getQuizzes = async (req: AuthRequest, res: Response) => {
+  try {
+    const quizzes = await prisma.quiz.findMany({
+      where: {
+        OR: [
+          { isPublic: true },
+          { teacherId: req.user?.id },
+        ],
+      },
+      include: {
+        teacher: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        images: true, // Include quiz images
+        _count: {
+          select: {
+            questions: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    res.json(quizzes);
+  } catch (error) {
+    console.error('Error getting quizzes:', error);
+    res.status(500).json({ error: 'Failed to get quizzes' });
+  }
+};
+
+export const getResponseDetails = async (req: AuthRequest, res: Response) => {
+  try {
+    const { quizId, responseId } = req.params;
+    
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Get response with quiz and questions
+    const response = await prisma.response.findUnique({
+      where: { 
+        id: responseId,
+        quizId: quizId
+      },
+      include: {
+        quiz: {
+          include: {
+            questions: true
+          }
+        }
+      }
+    });
+
+    if (!response) {
+      return res.status(404).json({ error: 'Response not found' });
+    }
+
+    // Check if user is authorized to view this response
+    if (response.userId !== req.user.id && response.quiz.teacherId !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized to view this response' });
+    }
+
+    // Format response details
+    const responseDetails = {
+      quizTitle: response.quiz.title,
+      score: response.score,
+      totalMarks: response.totalMarks,
+      percentage: Math.round((response.score / response.totalMarks) * 100),
+      submittedAt: response.createdAt,
+      questions: response.quiz.questions.map(question => {
+        const userAnswers = response.answers as unknown as QuizAnswer[];
+        const userAnswer = userAnswers.find(a => a.questionId === question.id);
+        let isCorrect = false;
+        let obtainedMarks = 0;
+
+        // Calculate if answer is correct and marks obtained
+        switch (question.type) {
+          case 'SINGLE_SELECT':
+            isCorrect = userAnswer?.answer === question.correctAnswer;
+            obtainedMarks = isCorrect ? question.marks : 0;
+            break;
+          case 'MULTIPLE_SELECT':
+            if (Array.isArray(userAnswer?.answer) && Array.isArray(question.correctAnswer)) {
+              const correctAnswers = question.correctAnswer as unknown as number[];
+              const correctCount = userAnswer.answer.filter((a: number) => 
+                correctAnswers.includes(a)
+              ).length;
+              const marksPerOption = question.marks / correctAnswers.length;
+              obtainedMarks = correctCount * marksPerOption;
+              isCorrect = correctCount === correctAnswers.length;
+            }
+            break;
+          case 'FILL_IN_BLANK':
+            isCorrect = userAnswer?.answer === question.correctAnswer;
+            obtainedMarks = isCorrect ? question.marks : 0;
+            break;
+          case 'INTEGER':
+            isCorrect = Number(userAnswer?.answer) === question.correctAnswer;
+            obtainedMarks = isCorrect ? question.marks : 0;
+            break;
+        }
+
+        return {
+          id: question.id,
+          text: question.text,
+          type: question.type,
+          options: question.options,
+          correctAnswer: question.correctAnswer,
+          userAnswer: userAnswer?.answer,
+          isCorrect,
+          marks: question.marks,
+          obtainedMarks
+        };
+      })
+    };
+
+    return res.json(responseDetails);
+  } catch (error) {
+    console.error('Error getting response details:', error);
+    return res.status(500).json({ error: 'Failed to get response details' });
+  }
+};
+
+export const getQuizMetadata = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const quiz = await prisma.quiz.findUnique({
+      where: { id },
+      include: {
+        teacher: {
+          select: {
+            id: true,
+            email: true,
+            name: true
+          }
+        },
+        images: true,
+        _count: {
+          select: {
+            questions: true
+          }
+        }
+      }
+    });
+
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    // Check if user is authorized to view this quiz
+    if (!quiz.isPublic && quiz.teacherId !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized to view this quiz' });
+    }
+
+    // Return only metadata
+    return res.json({
+      id: quiz.id,
+      title: quiz.title,
+      description: quiz.description,
+      duration: quiz.duration,
+      isPublic: quiz.isPublic,
+      totalMarks: quiz.totalMarks,
+      uniqueAttempts: quiz.uniqueAttempts,
+      createdAt: quiz.createdAt,
+      updatedAt: quiz.updatedAt,
+      teacher: quiz.teacher,
+      images: quiz.images,
+      questionCount: quiz._count.questions
+    });
+  } catch (error) {
+    console.error('Error getting quiz metadata:', error);
+    return res.status(500).json({ error: 'Failed to get quiz metadata' });
+  }
+};
+
+export const getQuizQuestions = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const quiz = await prisma.quiz.findUnique({
+      where: { id },
+      include: {
+        questions: {
+          include: {
+            images: true
+          }
+        }
+      }
+    });
+
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    // Check if user is authorized to view this quiz
+    if (!quiz.isPublic && quiz.teacherId !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized to view this quiz' });
+    }
+
+    // Return questions without correct answers
+    const questions = quiz.questions.map(question => ({
+      id: question.id,
+      text: question.text,
+      type: question.type,
+      options: question.options,
+      marks: question.marks,
+      images: question.images
+    }));
+
+    return res.json({
+      quizId: quiz.id,
+      title: quiz.title,
+      questions
+    });
+  } catch (error) {
+    console.error('Error getting quiz questions:', error);
+    return res.status(500).json({ error: 'Failed to get quiz questions' });
+  }
+};
+
+export const getUserAttemptedQuizzes = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Get all responses for the user with quiz details
+    const responses = await prisma.response.findMany({
+      where: {
+        userId: req.user.id
+      },
+      include: {
+        quiz: {
+          include: {
+            teacher: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            },
+            _count: {
+              select: {
+                questions: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Format the response
+    const attemptedQuizzes = responses.map(response => ({
+      quizId: response.quiz.id,
+      quizTitle: response.quiz.title,
+      teacher: response.quiz.teacher,
+      score: response.score,
+      totalMarks: response.totalMarks,
+      percentage: Math.round((response.score / response.totalMarks) * 100),
+      totalQuestions: response.quiz._count.questions,
+      submittedAt: response.createdAt
+    }));
+
+    return res.json({
+      totalAttempts: attemptedQuizzes.length,
+      quizzes: attemptedQuizzes
+    });
+  } catch (error) {
+    console.error('Error getting user attempted quizzes:', error);
+    return res.status(500).json({ error: 'Failed to get attempted quizzes' });
+  }
+};

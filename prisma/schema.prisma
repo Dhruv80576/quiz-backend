@@ -16,28 +16,37 @@ model User {
   role      Role       @default(STUDENT)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
-  quizzes   Quiz[]
+  quizzes   Quiz[]     @relation("TeacherQuizzes")
   responses Response[]
+  teachingClasses Class[]    @relation("TeacherClasses")
+  enrolledClasses Class[]    @relation("StudentClasses")
+  resourceMaterials ResourceMaterial[]
 }
 
 enum Role {
+  ADMIN
   TEACHER
   STUDENT
 }
 
 model Quiz {
-  id          String     @id @default(cuid())
+  id          String     @id @default(uuid())
   title       String
-  description String
-  duration    Int
+  description String?
+  duration    Int        // Duration in minutes
   isPublic    Boolean    @default(false)
   password    String?    // Optional password for quiz access
+  totalMarks  Int        @default(0)  // Total marks for the quiz
+  uniqueAttempts Int     @default(0)  // Number of unique users who attempted the quiz
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   teacherId   String
-  teacher     User       @relation(fields: [teacherId], references: [id])
+  teacher     User       @relation("TeacherQuizzes", fields: [teacherId], references: [id])
   questions   Question[]
   responses   Response[]
+  classId     String?
+  class       Class?     @relation(fields: [classId], references: [id])
+  images      QuizImage[]
 }
 
 model Response {
@@ -47,7 +56,8 @@ model Response {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   answers   Json     // Store answers as JSON
-  score     Int
+  score     Int      // Store score as marks obtained
+  totalMarks Int     // Store total possible marks
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -65,6 +75,69 @@ model Question {
   type          QuestionType
   options       String[]     // For single/multiple select questions
   correctAnswer Int          // For single/multiple select: index, for fill-in-blank: 0, for integer: exact number
+  marks         Int          @default(1)  // Marks for this question
   quizId        String
   quiz          Quiz         @relation(fields: [quizId], references: [id])
+  images        QuestionImage[]
+}
+
+model QuestionImage {
+  id        String   @id @default(uuid())
+  imageUrl  String   // S3 URL
+  fileName  String   // Original file name
+  fileSize  Int      // Size in bytes
+  fileType  String   // MIME type
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  question  Question @relation(fields: [questionId], references: [id])
+  questionId String
+
+  @@index([questionId])
+}
+
+model Class {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  password    String   // Password for students to join
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  teacherId   String
+  teacher     User     @relation("TeacherClasses", fields: [teacherId], references: [id])
+  students    User[]   @relation("StudentClasses")
+  quizzes     Quiz[]
+  resourceMaterials ResourceMaterial[]
+}
+
+model ResourceMaterial {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  fileUrl     String   // S3 URL
+  fileType    String   // MIME type
+  fileSize    Int      // Size in bytes
+  fileName    String   // Original file name
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  teacher     User     @relation(fields: [teacherId], references: [id])
+  teacherId   String
+  class       Class?   @relation(fields: [classId], references: [id])
+  classId     String?
+
+  @@index([teacherId])
+  @@index([classId])
+}
+
+model QuizImage {
+  id        String   @id @default(uuid())
+  imageUrl  String   // S3 URL
+  fileName  String   // Original file name
+  fileSize  Int      // Size in bytes
+  fileType  String   // MIME type
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  quiz      Quiz     @relation(fields: [quizId], references: [id])
+  quizId    String
+
+  @@index([quizId])
 }

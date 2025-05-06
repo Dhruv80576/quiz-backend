@@ -18,6 +18,9 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const db_1 = require("./config/db");
 const auth_1 = __importDefault(require("./routes/auth"));
 const quiz_1 = __importDefault(require("./routes/quiz"));
+const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
+const classRoutes_1 = __importDefault(require("./routes/classRoutes"));
+const fileUpload_1 = __importDefault(require("./routes/fileUpload"));
 // Load environment variables first
 dotenv_1.default.config();
 // Initialize express app
@@ -28,6 +31,9 @@ app.use(express_1.default.json());
 // Routes
 app.use('/api/auth', auth_1.default);
 app.use('/api/quiz', quiz_1.default);
+app.use('/api/admin', adminRoutes_1.default);
+app.use('/api/classes', classRoutes_1.default);
+app.use('/api/upload', fileUpload_1.default);
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);

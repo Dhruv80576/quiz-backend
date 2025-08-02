@@ -1,0 +1,651 @@
+{
+	"info": {
+		"_postman_id": "user-management-apis",
+		"name": "User Management APIs",
+		"description": "Complete collection of User Management APIs for the Neet ChamP Backend application. Includes user profile management, statistics, grades, and subjects endpoints.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "user-management"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{authToken}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3001/api",
+			"type": "string",
+			"description": "Base URL for the backend API server"
+		},
+		{
+			"key": "authToken",
+			"value": "",
+			"type": "string",
+			"description": "JWT authentication token - get this from login endpoint"
+		}
+	],
+	"item": [
+		{
+			"name": "Get User Profile",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has user object\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    pm.expect(responseJson).to.have.property('user');",
+							"    pm.expect(responseJson.user).to.have.property('id');",
+							"    pm.expect(responseJson.user).to.have.property('email');",
+							"    pm.expect(responseJson.user).to.have.property('role');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/user/profile",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"user",
+						"profile"
+					]
+				},
+				"description": "Get current user's profile information including:\n- id: User unique identifier\n- email: User email address\n- name: User full name (optional)\n- role: User role (TEACHER, STUDENT, ADMIN)\n- createdAt: Account creation timestamp\n- updatedAt: Last profile update timestamp\n\n**Authentication Required:** Bearer token in Authorization header"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/user/profile",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"user",
+								"profile"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"user\": {\n    \"id\": \"user-uuid-here\",\n    \"email\": \"john.doe@example.com\",\n    \"name\": \"John Doe\",\n    \"role\": \"TEACHER\",\n    \"createdAt\": \"2024-01-15T10:30:00.000Z\",\n    \"updatedAt\": \"2024-02-01T14:22:00.000Z\"\n  }\n}"
+				}
+			]
+		},
+		{
+			"name": "Update User Profile",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Profile updated successfully\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    pm.expect(responseJson).to.have.property('message');",
+							"    pm.expect(responseJson).to.have.property('user');",
+							"    pm.expect(responseJson.message).to.eql('Profile updated successfully');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"name\": \"John Doe Updated\",\n  \"email\": \"john.updated@example.com\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/user/profile",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"user",
+						"profile"
+					]
+				},
+				"description": "Update user profile information. Only provided fields will be updated.\n\n**Request Body:**\n- name (optional): User's full name\n- email (optional): New email address (must be unique)\n\n**Validation:**\n- Email uniqueness is checked\n- At least one field must be provided\n\n**Authentication Required:** Bearer token in Authorization header"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"John Doe Updated\",\n  \"email\": \"john.updated@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/user/profile",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"user",
+								"profile"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"message\": \"Profile updated successfully\",\n  \"user\": {\n    \"id\": \"user-uuid-here\",\n    \"email\": \"john.updated@example.com\",\n    \"name\": \"John Doe Updated\",\n    \"role\": \"TEACHER\",\n    \"createdAt\": \"2024-01-15T10:30:00.000Z\",\n    \"updatedAt\": \"2024-02-01T16:45:00.000Z\"\n  }\n}"
+				}
+			]
+		},
+		{
+			"name": "Change Password",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Password changed successfully\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    pm.expect(responseJson).to.have.property('message');",
+							"    pm.expect(responseJson.message).to.eql('Password changed successfully');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"currentPassword\": \"oldPassword123\",\n  \"newPassword\": \"newSecurePassword123\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/user/password",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"user",
+						"password"
+					]
+				},
+				"description": "Change user password securely.\n\n**Request Body:**\n- currentPassword (required): User's current password for verification\n- newPassword (required): New password (minimum 6 characters recommended)\n\n**Security:**\n- Current password is verified using bcrypt\n- New password is hashed before storage\n- Passwords are never returned in responses\n\n**Authentication Required:** Bearer token in Authorization header"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"currentPassword\": \"oldPassword123\",\n  \"newPassword\": \"newSecurePassword123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/user/password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"user",
+								"password"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"message\": \"Password changed successfully\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Get User Statistics",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has stats object\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    pm.expect(responseJson).to.have.property('stats');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/user/stats",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"user",
+						"stats"
+					]
+				},
+				"description": "Get user statistics based on their role.\n\n**For Teachers:**\n- quizzes: Number of quizzes created\n- students: Number of unique students who attempted their quizzes\n- classes: Number of classes taught\n- totalAttempts: Total quiz attempts on their quizzes\n\n**For Students:**\n- attemptedQuizzes: Number of quizzes attempted\n- classes: Number of classes enrolled in\n- totalScore: Total score obtained across all quizzes\n- averageScore: Average score (rounded)\n\n**Authentication Required:** Bearer token in Authorization header"
+			},
+			"response": [
+				{
+					"name": "Teacher Stats Response",
+					"originalRequest": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/user/stats",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"user",
+								"stats"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"stats\": {\n    \"quizzes\": 15,\n    \"students\": 42,\n    \"classes\": 3,\n    \"totalAttempts\": 127\n  }\n}"
+				},
+				{
+					"name": "Student Stats Response",
+					"originalRequest": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/user/stats",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"user",
+								"stats"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"stats\": {\n    \"attemptedQuizzes\": 23,\n    \"classes\": 2,\n    \"totalScore\": 1450,\n    \"averageScore\": 78\n  }\n}"
+				}
+			]
+		},
+		{
+			"name": "Get Available Grades",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has grades array\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    pm.expect(responseJson).to.have.property('grades');",
+							"    pm.expect(responseJson.grades).to.be.an('array');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/user/grades",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"user",
+						"grades"
+					]
+				},
+				"description": "Get list of available grade levels for the education system.\n\n**Returns:**\n- Array of grade objects with id and name\n- Currently includes: Class 11, Class 12, NEET Preparation, JEE Preparation\n\n**Use Cases:**\n- Populate dropdown menus in forms\n- Filter quizzes by grade level\n- Display grade options in UI\n\n**Authentication Required:** Bearer token in Authorization header"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/user/grades",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"user",
+								"grades"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"grades\": [\n    {\n      \"id\": \"11\",\n      \"name\": \"Class 11\"\n    },\n    {\n      \"id\": \"12\",\n      \"name\": \"Class 12\"\n    },\n    {\n      \"id\": \"neet\",\n      \"name\": \"NEET Preparation\"\n    },\n    {\n      \"id\": \"jee\",\n      \"name\": \"JEE Preparation\"\n    }\n  ]\n}"
+				}
+			]
+		},
+		{
+			"name": "Get Available Subjects",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has subjects array\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    pm.expect(responseJson).to.have.property('subjects');",
+							"    pm.expect(responseJson.subjects).to.be.an('array');",
+							"});",
+							"",
+							"pm.test(\"Each subject has required fields\", function () {",
+							"    const responseJson = pm.response.json();",
+							"    if (responseJson.subjects.length > 0) {",
+							"        const subject = responseJson.subjects[0];",
+							"        pm.expect(subject).to.have.property('id');",
+							"        pm.expect(subject).to.have.property('name');",
+							"        pm.expect(subject).to.have.property('questionCount');",
+							"    }",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/user/subjects",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"user",
+						"subjects"
+					]
+				},
+				"description": "Get list of available subjects with question counts.\n\n**Dynamic Generation:**\n- Subjects are dynamically generated from existing questions in the database\n- Question count shows total questions available per subject\n- Subjects with zero questions are not included\n\n**Response Format:**\n- id: Subject identifier (lowercase with underscores)\n- name: Display name of the subject\n- questionCount: Number of questions available in this subject\n\n**Use Cases:**\n- Subject selection in quiz creation\n- Filter questions by subject\n- Display subject statistics\n\n**Authentication Required:** Bearer token in Authorization header"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/user/subjects",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"user",
+								"subjects"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"subjects\": [\n    {\n      \"id\": \"physics\",\n      \"name\": \"Physics\",\n      \"questionCount\": 245\n    },\n    {\n      \"id\": \"chemistry\",\n      \"name\": \"Chemistry\",\n      \"questionCount\": 198\n    },\n    {\n      \"id\": \"biology\",\n      \"name\": \"Biology\",\n      \"questionCount\": 312\n    },\n    {\n      \"id\": \"mathematics\",\n      \"name\": \"Mathematics\",\n      \"questionCount\": 156\n    }\n  ]\n}"
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Pre-request script to check if auth token exists",
+					"if (!pm.collectionVariables.get('authToken')) {",
+					"    console.log('Warning: No auth token found. Please login first to get a token.');",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global test script to handle common error responses",
+					"if (pm.response.code === 401) {",
+					"    pm.test('Authentication Error', function () {",
+					"        pm.expect.fail('Unauthorized - Please check your auth token');",
+					"    });",
+					"}",
+					"",
+					"if (pm.response.code === 403) {",
+					"    pm.test('Authorization Error', function () {",
+					"        pm.expect.fail('Forbidden - Insufficient permissions');",
+					"    });",
+					"}",
+					"",
+					"if (pm.response.code >= 500) {",
+					"    pm.test('Server Error', function () {",
+					"        pm.expect.fail('Server error - Check backend logs');",
+					"    });",
+					"}"
+				]
+			}
+		}
+	]
+}

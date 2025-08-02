@@ -69,13 +69,26 @@ enum QuestionType {
   INTEGER
 }
 
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
 model Question {
   id            String       @id @default(uuid())
   text          String
   type          QuestionType
   options       String[]     // For single/multiple select questions
-  correctAnswer Int          // For single/multiple select: index, for fill-in-blank: 0, for integer: exact number
+  correctAnswer Json         // For single select: number, multiple select: number[], fill-in-blank: string[], integer: number
   marks         Int          @default(1)  // Marks for this question
+  subject       String       // Subject of the question (e.g., Physics, Chemistry, Biology)
+  explanation   String?      // Detailed explanation of the correct answer
+  answerLink    String?      // URL to additional resources or reference material
+  difficulty    Difficulty   @default(MEDIUM)  // Question difficulty level
+  tags          String[]     @default([])  // Tags for categorization (e.g., ["thermodynamics", "heat transfer"])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
   quizId        String
   quiz          Quiz         @relation(fields: [quizId], references: [id])
   images        QuestionImage[]

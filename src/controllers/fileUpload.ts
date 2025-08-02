@@ -6,6 +6,7 @@ import { uploadToS3, deleteFromS3 } from '../config/s3';
 // Upload resource material
 export const uploadResourceMaterial = async (req: AuthRequest, res: Response) => {
   try {
+    console.log('Received file:', req.file);
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }

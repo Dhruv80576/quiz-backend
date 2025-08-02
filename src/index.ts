@@ -1,13 +1,14 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import { connectDB } from './config/db';
-import authRoutes from './routes/auth';
-import quizRoutes from './routes/quiz';
-import adminRoutes from './routes/adminRoutes';
-import classRoutes from './routes/classRoutes';
-import fileUploadRoutes from './routes/fileUpload';
-
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { connectDB } from "./config/db";
+import authRoutes from "./routes/auth";
+import quizRoutes from "./routes/quiz";
+import adminRoutes from "./routes/adminRoutes";
+import classRoutes from "./routes/classRoutes";
+import fileUploadRoutes from "./routes/fileUpload";
+import genaiRoutes from "./routes/genaiRoutes";
+import userRoutes from "./routes/user";
 // Load environment variables first
 dotenv.config();
 
@@ -19,17 +20,26 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/quiz', quizRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/classes', classRoutes);
-app.use('/api/upload', fileUploadRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/quiz", quizRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/classes", classRoutes);
+app.use("/api/upload", fileUploadRoutes);
+app.use("/api/genai", genaiRoutes);
+app.use("/api/user", userRoutes);
 
 // Error handling middleware
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
-});
+app.use(
+  (
+    err: Error,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    console.error(err.stack);
+    res.status(500).json({ message: "Something went wrong!" });
+  }
+);
 
 // Database connection
 connectDB();
@@ -42,7 +52,7 @@ app.listen(PORT, () => {
 });
 
 // Handle shutdown
-process.on('SIGINT', async () => {
+process.on("SIGINT", async () => {
   await connectDB();
   process.exit(0);
-}); 
+});

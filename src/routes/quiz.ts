@@ -42,7 +42,7 @@ router.post('/:quizId/questions', authenticateToken, (req: AuthRequest, res) => 
 router.put('/:quizId/questions/:questionId', authenticateToken, (req: AuthRequest, res) => updateQuestion(req, res));
 router.delete('/:quizId/questions/:questionId', authenticateToken, (req: AuthRequest, res) => deleteQuestion(req, res));
 router.post('/:id/public', authenticateToken, (req: AuthRequest, res) => makeQuizPublic(req, res));
-router.post('/:id/submit', authenticateToken, (req: AuthRequest, res) => submitQuiz(req, res));
+router.post('/:quizId/submit', authenticateToken, (req: AuthRequest, res) => submitQuiz(req, res));
 
 // Search and filter quizzes
 router.get('/search', authenticateToken, (req: AuthRequest, res) => searchQuizzes(req, res));
@@ -54,6 +54,6 @@ router.post('/:id/validate-password', (req, res) => validateQuizPassword(req, re
 router.get('/:id/leaderboard', (req, res) => getQuizLeaderboard(req, res));
 
 // Get response details
-router.get('/:quizId/responses/:responseId', authenticateToken, getResponseDetails);
+router.get('/:quizId/responses', authenticateToken, getResponseDetails);
 
 export default router;

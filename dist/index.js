@@ -21,6 +21,8 @@ const quiz_1 = __importDefault(require("./routes/quiz"));
 const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
 const classRoutes_1 = __importDefault(require("./routes/classRoutes"));
 const fileUpload_1 = __importDefault(require("./routes/fileUpload"));
+const genaiRoutes_1 = __importDefault(require("./routes/genaiRoutes"));
+const user_1 = __importDefault(require("./routes/user"));
 // Load environment variables first
 dotenv_1.default.config();
 // Initialize express app
@@ -29,15 +31,17 @@ const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 // Routes
-app.use('/api/auth', auth_1.default);
-app.use('/api/quiz', quiz_1.default);
-app.use('/api/admin', adminRoutes_1.default);
-app.use('/api/classes', classRoutes_1.default);
-app.use('/api/upload', fileUpload_1.default);
+app.use("/api/auth", auth_1.default);
+app.use("/api/quiz", quiz_1.default);
+app.use("/api/admin", adminRoutes_1.default);
+app.use("/api/classes", classRoutes_1.default);
+app.use("/api/upload", fileUpload_1.default);
+app.use("/api/genai", genaiRoutes_1.default);
+app.use("/api/user", user_1.default);
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);
-    res.status(500).json({ message: 'Something went wrong!' });
+    res.status(500).json({ message: "Something went wrong!" });
 });
 // Database connection
 (0, db_1.connectDB)();
@@ -47,7 +51,7 @@ app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
 // Handle shutdown
-process.on('SIGINT', () => __awaiter(void 0, void 0, void 0, function* () {
+process.on("SIGINT", () => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, db_1.connectDB)();
     process.exit(0);
 }));

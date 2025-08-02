@@ -20,7 +20,7 @@ router.post('/:quizId/questions', auth_1.authenticateToken, (req, res) => (0, qu
 router.put('/:quizId/questions/:questionId', auth_1.authenticateToken, (req, res) => (0, quiz_1.updateQuestion)(req, res));
 router.delete('/:quizId/questions/:questionId', auth_1.authenticateToken, (req, res) => (0, quiz_1.deleteQuestion)(req, res));
 router.post('/:id/public', auth_1.authenticateToken, (req, res) => (0, quiz_1.makeQuizPublic)(req, res));
-router.post('/:id/submit', auth_1.authenticateToken, (req, res) => (0, quiz_1.submitQuiz)(req, res));
+router.post('/:quizId/submit', auth_1.authenticateToken, (req, res) => (0, quiz_1.submitQuiz)(req, res));
 // Search and filter quizzes
 router.get('/search', auth_1.authenticateToken, (req, res) => (0, quiz_1.searchQuizzes)(req, res));
 // Public route for password validation
@@ -28,5 +28,5 @@ router.post('/:id/validate-password', (req, res) => (0, quiz_1.validateQuizPassw
 // Get quiz leaderboard
 router.get('/:id/leaderboard', (req, res) => (0, quiz_1.getQuizLeaderboard)(req, res));
 // Get response details
-router.get('/:quizId/responses/:responseId', auth_1.authenticateToken, quiz_1.getResponseDetails);
+router.get('/:quizId/responses', auth_1.authenticateToken, quiz_1.getResponseDetails);
 exports.default = router;

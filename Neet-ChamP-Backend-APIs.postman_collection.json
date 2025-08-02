@@ -1,0 +1,1065 @@
+{
+	"info": {
+		"_postman_id": "neet-champ-backend-apis",
+		"name": "Neet ChamP Backend APIs",
+		"description": "Complete collection of APIs for the Neet ChamP Backend application including Quiz management, Authentication, File Upload, Admin, Class, and GenAI routes.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{authToken}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000/api",
+			"type": "string"
+		},
+		{
+			"key": "authToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "quizId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "questionId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "responseId",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Quiz Management",
+			"item": [
+				{
+					"name": "Get All Quizzes",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/quiz",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz"
+							]
+						},
+						"description": "Get all public quizzes and user's own quizzes"
+					}
+				},
+				{
+					"name": "Create Quiz",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Sample Quiz\",\n  \"description\": \"This is a sample quiz for testing\",\n  \"duration\": 30,\n  \"isPublic\": false,\n  \"password\": \"quiz123\",\n  \"questions\": [\n    {\n      \"text\": \"What is the capital of France?\",\n      \"type\": \"SINGLE_SELECT\",\n      \"options\": [\"London\", \"Berlin\", \"Paris\", \"Madrid\"],\n      \"correctAnswer\": 2,\n      \"marks\": 2,\n      \"subject\": \"Geography\",\n      \"explanation\": \"Paris is the capital and largest city of France.\",\n      \"difficulty\": \"EASY\",\n      \"tags\": [\"geography\", \"capitals\"]\n    },\n    {\n      \"text\": \"Select all prime numbers:\",\n      \"type\": \"MULTIPLE_SELECT\",\n      \"options\": [\"2\", \"3\", \"4\", \"5\", \"6\", \"7\"],\n      \"correctAnswer\": [0, 1, 3, 5],\n      \"marks\": 4,\n      \"subject\": \"Mathematics\",\n      \"explanation\": \"Prime numbers are natural numbers greater than 1 that have no positive divisors other than 1 and themselves.\",\n      \"difficulty\": \"MEDIUM\",\n      \"tags\": [\"math\", \"prime-numbers\"]\n    },\n    {\n      \"text\": \"Fill in the blank: The chemical symbol for gold is ____\",\n      \"type\": \"FILL_IN_BLANK\",\n      \"options\": [],\n      \"correctAnswer\": [\"Au\", \"au\", \"AU\"],\n      \"marks\": 1,\n      \"subject\": \"Chemistry\",\n      \"explanation\": \"Au is derived from the Latin word 'aurum' meaning gold.\",\n      \"difficulty\": \"EASY\",\n      \"tags\": [\"chemistry\", \"symbols\"]\n    },\n    {\n      \"text\": \"What is 15 + 27?\",\n      \"type\": \"INTEGER\",\n      \"options\": [],\n      \"correctAnswer\": 42,\n      \"marks\": 1,\n      \"subject\": \"Mathematics\",\n      \"explanation\": \"Simple addition: 15 + 27 = 42\",\n      \"difficulty\": \"EASY\",\n      \"tags\": [\"math\", \"addition\"]\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/quiz",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz"
+							]
+						},
+						"description": "Create a new quiz with questions"
+					}
+				},
+				{
+					"name": "Update Quiz",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Updated Quiz Title\",\n  \"description\": \"Updated description\",\n  \"duration\": 45,\n  \"isPublic\": true,\n  \"password\": null,\n  \"imagesToDelete\": []\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}"
+							]
+						},
+						"description": "Update an existing quiz"
+					}
+				},
+				{
+					"name": "Delete Quiz",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}"
+							]
+						},
+						"description": "Delete a quiz and all associated images"
+					}
+				},
+				{
+					"name": "Get Quiz Metadata",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}/metadata",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}",
+								"metadata"
+							]
+						},
+						"description": "Get quiz metadata without questions"
+					}
+				},
+				{
+					"name": "Get Quiz Questions",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}/questions",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}",
+								"questions"
+							]
+						},
+						"description": "Get quiz questions without correct answers (for taking quiz)"
+					}
+				},
+				{
+					"name": "Search Quizzes",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/search?searchTerm=sample&sortBy=createdAt&sortOrder=desc&page=1&limit=10&isPublic=true",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"search"
+							],
+							"query": [
+								{
+									"key": "searchTerm",
+									"value": "sample"
+								},
+								{
+									"key": "sortBy",
+									"value": "createdAt"
+								},
+								{
+									"key": "sortOrder",
+									"value": "desc"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "teacherId",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "classId",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "isPublic",
+									"value": "true"
+								}
+							]
+						},
+						"description": "Search and filter quizzes with pagination"
+					}
+				},
+				{
+					"name": "Make Quiz Public",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}/public",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}",
+								"public"
+							]
+						},
+						"description": "Make a quiz public"
+					}
+				},
+				{
+					"name": "Validate Quiz Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"password\": \"quiz123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}/validate-password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}",
+								"validate-password"
+							]
+						},
+						"description": "Validate password for a protected quiz"
+					}
+				}
+			],
+			"description": "APIs for managing quizzes"
+		},
+		{
+			"name": "Question Management",
+			"item": [
+				{
+					"name": "Add Question to Quiz",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"text\": \"What is the largest planet in our solar system?\",\n  \"type\": \"SINGLE_SELECT\",\n  \"options\": [\"Earth\", \"Jupiter\", \"Saturn\", \"Neptune\"],\n  \"correctAnswer\": 1,\n  \"marks\": 2,\n  \"subject\": \"Astronomy\",\n  \"explanation\": \"Jupiter is the largest planet in our solar system.\",\n  \"difficulty\": \"EASY\",\n  \"tags\": [\"astronomy\", \"planets\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}/questions",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}",
+								"questions"
+							]
+						},
+						"description": "Add a new question to an existing quiz"
+					}
+				},
+				{
+					"name": "Update Question",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"text\": \"Updated question text\",\n  \"type\": \"SINGLE_SELECT\",\n  \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"],\n  \"correctAnswer\": 2,\n  \"marks\": 3,\n  \"subject\": \"Updated Subject\",\n  \"explanation\": \"Updated explanation\",\n  \"difficulty\": \"MEDIUM\",\n  \"tags\": [\"updated\", \"question\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}/questions/{{questionId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}",
+								"questions",
+								"{{questionId}}"
+							]
+						},
+						"description": "Update an existing question"
+					}
+				},
+				{
+					"name": "Delete Question",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}/questions/{{questionId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}",
+								"questions",
+								"{{questionId}}"
+							]
+						},
+						"description": "Delete a question and all associated images"
+					}
+				}
+			],
+			"description": "APIs for managing questions within quizzes"
+		},
+		{
+			"name": "Quiz Submission & Results",
+			"item": [
+				{
+					"name": "Submit Quiz",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"question-id-1\",\n      \"answer\": 2\n    },\n    {\n      \"questionId\": \"question-id-2\",\n      \"answer\": [0, 1, 3]\n    },\n    {\n      \"questionId\": \"question-id-3\",\n      \"answer\": \"Au\"\n    },\n    {\n      \"questionId\": \"question-id-4\",\n      \"answer\": 42\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}/submit",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}",
+								"submit"
+							]
+						},
+						"description": "Submit quiz answers and get score"
+					}
+				},
+				{
+					"name": "Get Quiz Leaderboard",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}/leaderboard",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}",
+								"leaderboard"
+							]
+						},
+						"description": "Get leaderboard for a quiz (public endpoint)"
+					}
+				},
+				{
+					"name": "Get Response Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/{{quizId}}/responses",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"{{quizId}}",
+								"responses"
+							]
+						},
+						"description": "Get detailed response information for a quiz"
+					}
+				},
+				{
+					"name": "Get User Attempted Quizzes",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/attempted",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"attempted"
+							]
+						},
+						"description": "Get all quizzes attempted by the current user"
+					}
+				}
+			],
+			"description": "APIs for quiz submission and result management"
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Register User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"securePassword123\",\n  \"role\": \"STUDENT\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"register"
+							]
+						},
+						"description": "Register a new user"
+					}
+				},
+				{
+					"name": "Login User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"securePassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						},
+						"description": "Login user and get JWT token"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const responseData = pm.response.json();",
+									"    if (responseData.token) {",
+									"        pm.collectionVariables.set('authToken', responseData.token);",
+									"        console.log('Auth token saved to collection variable');",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Google OAuth Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"idToken\": \"google-id-token-here\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/google",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"google"
+							]
+						},
+						"description": "Login with Google OAuth"
+					}
+				},
+				{
+					"name": "Get Current User",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/auth/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"me"
+							]
+						},
+						"description": "Get current authenticated user information"
+					}
+				}
+			],
+			"description": "Authentication and user management APIs"
+		},
+		{
+			"name": "File Upload",
+			"item": [
+				{
+					"name": "Upload Quiz Image",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "image",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/upload/quiz/{{quizId}}/image",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"upload",
+								"quiz",
+								"{{quizId}}",
+								"image"
+							]
+						},
+						"description": "Upload an image for a quiz"
+					}
+				},
+				{
+					"name": "Upload Question Image",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "image",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/upload/question/{{questionId}}/image",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"upload",
+								"question",
+								"{{questionId}}",
+								"image"
+							]
+						},
+						"description": "Upload an image for a question"
+					}
+				}
+			],
+			"description": "File upload APIs for images"
+		},
+		{
+			"name": "Admin Routes",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/users",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"users"
+							]
+						},
+						"description": "Get all users (Admin only)"
+					}
+				},
+				{
+					"name": "Update User Role",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"role\": \"TEACHER\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/users/:userId/role",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"users",
+								":userId",
+								"role"
+							],
+							"variable": [
+								{
+									"key": "userId",
+									"value": "user-id-here"
+								}
+							]
+						},
+						"description": "Update user role (Admin only)"
+					}
+				},
+				{
+					"name": "Delete User",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/admin/users/:userId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"users",
+								":userId"
+							],
+							"variable": [
+								{
+									"key": "userId",
+									"value": "user-id-here"
+								}
+							]
+						},
+						"description": "Delete a user (Admin only)"
+					}
+				}
+			],
+			"description": "Admin-only APIs for user management"
+		},
+		{
+			"name": "Class Management",
+			"item": [
+				{
+					"name": "Create Class",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Physics Class 2024\",\n  \"description\": \"Advanced Physics course for NEET preparation\",\n  \"subject\": \"Physics\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/classes",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"classes"
+							]
+						},
+						"description": "Create a new class (Teacher only)"
+					}
+				},
+				{
+					"name": "Get All Classes",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/classes",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"classes"
+							]
+						},
+						"description": "Get all classes"
+					}
+				},
+				{
+					"name": "Join Class",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"classCode\": \"class-code-here\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/classes/join",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"classes",
+								"join"
+							]
+						},
+						"description": "Join a class using class code"
+					}
+				},
+				{
+					"name": "Get Class Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/classes/:classId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"classes",
+								":classId"
+							],
+							"variable": [
+								{
+									"key": "classId",
+									"value": "class-id-here"
+								}
+							]
+						},
+						"description": "Get details of a specific class"
+					}
+				}
+			],
+			"description": "Class management APIs"
+		},
+		{
+			"name": "GenAI Routes",
+			"item": [
+				{
+					"name": "Generate Questions",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subject\": \"Physics\",\n  \"topic\": \"Mechanics\",\n  \"difficulty\": \"MEDIUM\",\n  \"numberOfQuestions\": 5,\n  \"questionTypes\": [\"SINGLE_SELECT\", \"MULTIPLE_SELECT\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/genai/generate-questions",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"genai",
+								"generate-questions"
+							]
+						},
+						"description": "Generate questions using AI"
+					}
+				},
+				{
+					"name": "Enhance Questions",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{authToken}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"questions\": [\n    {\n      \"text\": \"What is force?\",\n      \"subject\": \"Physics\",\n      \"type\": \"SINGLE_SELECT\",\n      \"options\": [\"Push or pull\", \"Energy\", \"Power\", \"Work\"]\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/genai/enhance-questions",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"genai",
+								"enhance-questions"
+							]
+						},
+						"description": "Enhance existing questions with AI"
+					}
+				}
+			],
+			"description": "AI-powered question generation and enhancement"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	]
+}
